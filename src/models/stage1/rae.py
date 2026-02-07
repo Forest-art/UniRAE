@@ -1,3 +1,5 @@
+import os
+import json
 import torch
 import torch.nn as nn
 from .decoders import GeneralDecoder
@@ -33,6 +35,9 @@ class RAE(nn.Module):
     ):
         super().__init__()
         encoder_cls = ARCHS[encoder_cls]
+        
+        # encoder_params should be a dict with keys matching the encoder's __init__ parameters
+        # e.g., {dinov2_path: "path", normalize: true}
         self.encoder: Stage1Protocal = encoder_cls(**encoder_params)
         print(f"encoder_config_path: {encoder_config_path}")
         proc = AutoImageProcessor.from_pretrained(encoder_config_path)
@@ -47,7 +52,14 @@ class RAE(nn.Module):
         self.base_patches = (self.encoder_input_size // self.encoder_patch_size) ** 2 # number of patches of the latent
         
         # decoder
-        decoder_config = AutoConfig.from_pretrained(decoder_config_path)
+        if decoder_config_path.startswith('configs/') or (os.path.exists(decoder_config_path) and decoder_config_path.endswith('.json')):
+            # Local config file
+            with open(decoder_config_path, 'r') as f:
+                decoder_config_dict = json.load(f)
+            from transformers import ViTConfig
+            decoder_config = ViTConfig(**decoder_config_dict)
+        else:
+            decoder_config = AutoConfig.from_pretrained(decoder_config_path)
         decoder_config.hidden_size = self.latent_dim # set the hidden size of the decoder to be the same as the encoder's output
         decoder_config.patch_size = decoder_patch_size
         decoder_config.image_size = int(decoder_patch_size * sqrt(self.base_patches)) 

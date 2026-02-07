@@ -2,10 +2,10 @@
 # RAE DINO experiment configuration
 
 defaults:
-  - override /data: imagenet.yaml
-  - override /model: rae.yaml
-  - override /callbacks: default.yaml
-  - override /trainer: default.yaml
+  - override /data: imagenet
+  - override /model: rae
+  - override /callbacks: default
+  - override /trainer: default
   - override /logger: null
 
 # Experiment tags

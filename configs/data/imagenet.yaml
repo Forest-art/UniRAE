@@ -1,4 +1,3 @@
-# @package _global_
 # ImageNet dataset configuration
 # Supports both ImageFolder and HuggingFace dataset formats
 

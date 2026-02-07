@@ -1,4 +1,3 @@
-# @package _global_
 # RAE model configuration
 
 _target_: src.models.rae_module.RAELitModule
@@ -11,7 +10,7 @@ encoder_params:
   dinov2_path: 'facebook/dinov2-with-registers-base'
   normalize: true
 
-decoder_config_path: 'configs/decoder/ViTXL/decoder_config.json'
+decoder_config_path: '${paths.root_dir}/configs/decoder/ViTXL/config.json'
 decoder_patch_size: 16
 pretrained_decoder_path: null
 noise_tau: 0.8
@@ -33,13 +32,17 @@ disc_updates: 1
 disc_loss_type: hinge
 gen_loss_type: vanilla
 
-# Discriminator architecture
+# Discriminator architecture configuration
 disc_arch:
-  dino_ckpt_path: 'models/discs/dino_vit_small_patch8_224.pth'
-  ks: 9
-  norm_type: 'bn'
-  using_spec_norm: true
-  recipe: 'S_8'
+  arch:
+    dino_ckpt_path: '/home/project/models/discs/dino_vit_small_patch8_224.pth'
+    ks: 9
+    norm_type: 'bn'
+    using_spec_norm: true
+    recipe: 'S_8'
+  augment:
+    prob: 1.0
+    cutout: 0.0
 
 disc_optimizer:
   lr: 2.0e-4
@@ -53,10 +56,6 @@ disc_scheduler:
   base_lr: 2.0e-4
   final_lr: 2.0e-5
   warmup_from_zero: true
-
-disc_aug:
-  prob: 1.0
-  cutout: 0.0
 
 # Image configuration
 image_size: 256

@@ -14,8 +14,8 @@ from lightning import LightningModule
 from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 
-from models.stage1.rae import RAE
-from models.components.disc import (
+from .stage1.rae import RAE
+from .disc import (
     DiffAug,
     LPIPS,
     build_discriminator,
@@ -30,6 +30,8 @@ class RAELitModule(LightningModule):
 
     def __init__(
         self,
+        # Model name (for logging)
+        name: Optional[str] = None,
         # RAE configuration
         encoder_cls: str = 'Dinov2withNorm',
         encoder_config_path: str = 'facebook/dinov2-with-registers-base',
@@ -74,6 +76,9 @@ class RAELitModule(LightningModule):
         """Initialize RAELitModule."""
         super().__init__()
         
+        # Use manual optimization for multiple optimizers
+        self.automatic_optimization = False
+        
         # Save hyperparameters
         self.save_hyperparameters(logger=False)
         
@@ -117,7 +122,7 @@ class RAELitModule(LightningModule):
         self.lpips.eval()
         
         # Training state
-        self.global_step = 0
+        # global_step is managed by LightningModule
         self.disc_train = False
         self.use_gan = False
         self.use_lpips = False
@@ -189,9 +194,10 @@ class RAELitModule(LightningModule):
         disc_update_step = self.hparams.disc_upd_start_epoch * steps_per_epoch
         lpips_start_step = self.hparams.lpips_start_epoch * steps_per_epoch
         
-        self.use_gan = self.global_step >= gan_start_step and self.hparams.disc_weight > 0.0
-        train_disc = self.global_step >= disc_update_step and self.hparams.disc_weight > 0.0
-        self.use_lpips = self.global_step >= lpips_start_step and self.hparams.perceptual_weight > 0.0
+        current_step = self.trainer.global_step
+        self.use_gan = current_step >= gan_start_step and self.hparams.disc_weight > 0.0
+        train_disc = current_step >= disc_update_step and self.hparams.disc_weight > 0.0
+        self.use_lpips = current_step >= lpips_start_step and self.hparams.perceptual_weight > 0.0
         
         # Move images to device
         device = self.device
@@ -248,14 +254,6 @@ class RAELitModule(LightningModule):
         
         optimizer.step()
         
-        # Update scheduler if exists
-        schedulers = self.lr_schedulers()
-        if schedulers is not None:
-            if isinstance(schedulers, list):
-                schedulers[0].step()
-            else:
-                schedulers.step()
-        
         # Update EMA
         self._update_ema()
         
@@ -297,10 +295,6 @@ class RAELitModule(LightningModule):
                     "disc_accuracy": accuracy.detach(),
                 }
             
-            # Update disc scheduler if exists
-            if schedulers is not None and isinstance(schedulers, list) and len(schedulers) > 1:
-                schedulers[1].step()
-            
             self.discriminator.eval()
             self.rae.train()
         
@@ -314,11 +308,9 @@ class RAELitModule(LightningModule):
             self.log("train/disc_loss", disc_metrics["disc_loss"])
             self.log("train/disc_accuracy", disc_metrics["disc_accuracy"])
         
-        self.global_step += 1
-        
         return total_loss
     
-    def configure_optimizers(self) -> Dict[str, Any]:
+    def configure_optimizers(self):
         """Configure optimizers and schedulers."""
         # Generator optimizer
         gen_optimizer_config = self.hparams.optimizer or {}
@@ -338,56 +330,11 @@ class RAELitModule(LightningModule):
             weight_decay=disc_optimizer_config.get("weight_decay", 0.0),
         )
         
-        # Scheduler configuration
-        scheduler_config = self.hparams.scheduler or {}
-        disc_scheduler_config = self.hparams.disc_scheduler or {}
-        
-        # Create schedulers (will be initialized in setup)
-        return {
-            "optimizer": gen_optimizer,
-            "lr_scheduler": {
-                "scheduler": None,  # Will be set in setup
-                "monitor": "train/loss_total",
-                "interval": "step",
-            },
-        }
-    
-    def on_train_start(self) -> None:
-        """Setup before training starts."""
-        # Create schedulers with correct steps_per_epoch
-        steps_per_epoch = len(self.trainer.train_dataloader)
-        
-        generator_optimizer = self.optimizers(use_pl_optimizer=False)[0]
-        discriminator_optimizer = self.optimizers(use_pl_optimizer=False)[1]
-        
-        # Create generator scheduler
-        scheduler_config = self.hparams.scheduler
-        if scheduler_config and scheduler_config.get("type") == "cosine":
-            from utils.optim_utils import build_scheduler
-            gen_scheduler, _ = build_scheduler(generator_optimizer, steps_per_epoch, {"scheduler": scheduler_config})
-        else:
-            gen_scheduler = None
-        
-        # Create discriminator scheduler
-        disc_scheduler_config = self.hparams.disc_scheduler
-        if disc_scheduler_config and disc_scheduler_config.get("type") == "cosine":
-            from utils.optim_utils import build_scheduler
-            disc_scheduler, _ = build_scheduler(discriminator_optimizer, steps_per_epoch, {"scheduler": disc_scheduler_config})
-        else:
-            disc_scheduler = None
-        
-        # Store schedulers
-        self.gen_scheduler = gen_scheduler
-        self.disc_scheduler = disc_scheduler
+        # Return both optimizers
+        return [gen_optimizer, disc_optimizer]
     
     def on_train_batch_end(self, outputs, batch: Any, batch_idx: int) -> None:
         """Called after each training batch."""
-        # Update schedulers
-        if self.gen_scheduler is not None:
-            self.gen_scheduler.step()
-        if self.disc_scheduler is not None:
-            self.disc_scheduler.step()
-        
         # Log learning rates
         opt = self.optimizers(use_pl_optimizer=False)[0]
         self.log("lr/generator", opt.param_groups[0]["lr"])

@@ -139,18 +139,25 @@ class ImageFolderDataModule(LightningDataModule):
     def _setup_hf_dataset(self) -> None:
         """Setup HuggingFace dataset."""
         # Load HuggingFace dataset from disk
-        hf_dataset_dict = load_from_disk(str(self.data_dir))
+        hf_dataset = load_from_disk(str(self.data_dir))
         
-        if self.hf_split not in hf_dataset_dict:
-            raise ValueError(
-                f"Split '{self.hf_split}' not found in dataset at {self.data_dir}. "
-                f"Available: {hf_dataset_dict.keys()}"
-            )
+        # Handle both DatasetDict and single Dataset
+        from datasets import DatasetDict
+        if isinstance(hf_dataset, DatasetDict):
+            # DatasetDict has multiple splits
+            if self.hf_split not in hf_dataset:
+                raise ValueError(
+                    f"Split '{self.hf_split}' not found in dataset at {self.data_dir}. "
+                    f"Available: {list(hf_dataset.keys())}"
+                )
+            current_dataset = hf_dataset[self.hf_split]
+        else:
+            # Single Dataset - use it directly
+            current_dataset = hf_dataset
         
         # Create wrapped dataset
         if self.train_split < 1.0:
             # Need to split the dataset
-            current_dataset = hf_dataset_dict[self.hf_split]
             total_size = len(current_dataset)
             train_size = int(total_size * self.train_split)
             val_size = total_size - train_size
@@ -164,7 +171,6 @@ class ImageFolderDataModule(LightningDataModule):
             self.val_dataset = HFImageNetDataset(val_hf, transform=self.val_transform)
         else:
             # Use all data for training
-            current_dataset = hf_dataset_dict[self.hf_split]
             self.train_dataset = HFImageNetDataset(current_dataset, transform=self.train_transform)
             self.val_dataset = None
     

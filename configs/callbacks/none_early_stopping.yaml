@@ -1,0 +1,16 @@
+# Default callbacks without early stopping
+model_checkpoint:
+  _target_: lightning.pytorch.callbacks.ModelCheckpoint
+  dirpath: ${paths.output_dir}/checkpoints
+  filename: "epoch_{epoch:03d}"
+  monitor: "train/loss_total"
+  mode: "min"
+  save_last: true
+  auto_insert_metric_name: false
+
+rich_progress_bar:
+  _target_: lightning.pytorch.callbacks.RichProgressBar
+
+model_summary:
+  _target_: lightning.pytorch.callbacks.ModelSummary
+  max_depth: 1
