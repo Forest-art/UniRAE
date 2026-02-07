@@ -226,8 +226,25 @@ class ImageFolderDataModule(LightningDataModule):
         )
     
     def test_dataloader(self) -> DataLoader:
-        """Return test dataloader (uses validation set)."""
-        return self.val_dataloader()
+        """Return test dataloader (uses validation set or training set if no validation)."""
+        if self.val_dataset is not None:
+            return self.val_dataloader()
+        # If no validation set, use training data with validation transform for testing
+        test_dataset = HFImageNetDataset(
+            self.train_dataset.dataset if isinstance(self.train_dataset, HFImageNetDataset) 
+            else self.train_dataset.dataset if hasattr(self.train_dataset, 'dataset')
+            else self.train_dataset,
+            transform=self.val_transform
+        )
+        return DataLoader(
+            dataset=test_dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=self.pin_memory,
+            shuffle=False,
+            drop_last=False,
+            persistent_workers=True if self.num_workers > 0 else False,
+        )
 
 
 if __name__ == "__main__":

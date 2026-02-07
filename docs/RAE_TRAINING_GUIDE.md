@@ -67,30 +67,56 @@ python scripts/create_hf_test_data.py
 
 ## 训练命令
 
+### 小规模测试命令
+
+在完整训练之前，建议先运行小规模测试确保配置正确：
+
+```bash
+# 使用测试数据集（少量图片）
+# 注意：确保 batch_size 小于测试数据集大小（data/test_hf 有 20 张图片）
+python src/train.py experiment=rae_dino data.data_dir=data/test_hf trainer=cpu data.batch_size=2 trainer.max_epochs=1
+
+# 使用更小的数据集测试GPU训练
+python src/train.py experiment=rae_dino data.data_dir=data/test_hf data.batch_size=2 trainer=gpu trainer.max_epochs=1
+```
+
+**注意**：
+- 测试数据集 `data/test_hf` 只包含 20 张图片
+- 运行测试时，`batch_size` 必须小于或等于数据集大小
+- 完整训练时需要指向真实的 ImageNet 数据集路径
+
 ### 单 GPU 训练
 
 ```bash
+# 默认单 GPU 训练
 python src/train.py experiment=rae_dino
+
+# 使用指定 GPU
+CUDA_VISIBLE_DEVICES=0 python src/train.py experiment=rae_dino
 ```
 
 ### 多 GPU DDP 训练
 
-使用 4 个 GPU 进行 DDP 训练：
-
 ```bash
-# 使用 torchrun (PyTorch >= 1.10)
-python -m torch.distributed.run --nproc_per_node=4 src/train.py experiment=rae_ddp
+# 使用 8 个 GPU（默认配置）
+python src/train.py experiment=rae_ddp
 
-# 或使用 CUDA_VISIBLE_DEVICES
-CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.run --nproc_per_node=4 src/train.py experiment=rae_ddp
+# 使用 4 个 GPU（调整 batch_size）
+python src/train.py experiment=rae_ddp data.batch_size=128
+
+# 使用 2 个 GPU（调整 batch_size）
+python src/train.py experiment=rae_ddp data.batch_size=256
+
+# 使用 torchrun 启动
+torchrun --nproc_per_node=8 src/train.py experiment=rae_ddp
 ```
 
-### 指定使用的 GPU
-
-```bash
-# 使用 GPU 0 和 1
-CUDA_VISIBLE_DEVICES=0,1 python src/train.py experiment=rae_dino trainer.devices=2
-```
+**batch_size 调整说明**：
+- 原始 RAE 配置：global_batch_size=512
+- 8 个 GPU：`batch_size=64` (512/8)
+- 4 个 GPU：`batch_size=128` (512/4)
+- 2 个 GPU：`batch_size=256` (512/2)
+- 1 个 GPU：`batch_size=512`（但显存可能不足）
 
 ---
 
@@ -126,8 +152,7 @@ python src/train.py experiment=rae_dino \
     data.batch_size=64 \
     data.image_size=224 \
     model.optimizer.lr=2e-4 \
-    trainer.max_epochs=200 \
-    trainer.devices=4
+    trainer.max_epochs=200
 ```
 
 ---
@@ -151,14 +176,13 @@ defaults:
   - callbacks: default
 
 data:
-  batch_size: 32
-  num_workers: 4
-  image_size: 224
+  batch_size: 128  # 单 GPU 的 batch size
+  num_workers: 8
+  image_size: 256
 
-model:
-  encoder: dinov2
-  decoder: ViTXL
-  image_size: 224
+trainer:
+  max_epochs: 16
+  precision: 16  # 使用 fp16 混合精度
 ```
 
 #### 2. `configs/experiment/rae_ddp.yaml` (多 GPU)
@@ -171,43 +195,17 @@ defaults:
   - data: imagenet
   - trainer: ddp
   - logger: tensorboard
-  - callbacks: none
+  - callbacks: default
 
 data:
-  batch_size: 32
+  batch_size: 64  # 8 GPU 的每 GPU batch size
   num_workers: 8
-  image_size: 224
+  image_size: 256
 
-model:
-  encoder: dinov2
-  decoder: ViTXL
-  image_size: 224
-```
-
-### 使用不同的编码器
-
-```bash
-# 使用 DINOv2-B (默认)
-python src/train.py experiment=rae_dino model.encoder=dinov2
-
-# 使用 MAE
-python src/train.py experiment=rae_dino model.encoder=mae
-
-# 使用 SigLIP2
-python src/train.py experiment=rae_dino model.encoder=siglip2
-```
-
-### 使用不同的解码器
-
-```bash
-# 使用 ViT-B decoder
-python src/train.py experiment=rae_dino model.decoder=ViTB
-
-# 使用 ViT-L decoder
-python src/train.py experiment=rae_dino model.decoder=ViTL
-
-# 使用 ViT-XL decoder (默认)
-python src/train.py experiment=rae_dino model.decoder=ViTXL
+trainer:
+  max_epochs: 16
+  precision: 16
+  strategy: ddp  # 使用 DDP 策略
 ```
 
 ---
@@ -220,38 +218,75 @@ python src/train.py experiment=rae_dino model.decoder=ViTXL
 
 ```yaml
 model:
-  encoder: dinov2          # 编码器类型: dinov2, mae, siglip2
-  encoder_name: DINOv2-B    # 具体模型名称
-  pretrained: true         # 是否使用预训练权重
-  freeze_encoder: false    # 是否冻结编码器参数
+  encoder_cls: Dinov2withNorm
+  encoder_config_path: facebook/dinov2-with-registers-base
+  encoder_input_size: 224
+  encoder_params:
+    dinov2_path: facebook/dinov2-with-registers-base
+    normalize: true
 ```
 
 ### 解码器配置
 
 ```yaml
 model:
-  decoder: ViTXL           # 解码器类型: ViTB, ViTL, ViTXL
-  decoder_config_path: ${oc.decode:configs/decoder/ViTXL/config.json}
-  latent_dim: 1024         # 潜在空间维度
+  decoder_config_path: configs/decoder/ViTXL/config.json
+  decoder_patch_size: 16
+  pretrained_decoder_path: null
 ```
 
 ### 训练配置
 
 ```yaml
 model:
+  # 优化器配置
   optimizer:
-    name: adamw            # 优化器: adamw, adam, sgd
-    lr: 1e-4               # 学习率
-    weight_decay: 0.05     # 权重衰减
+    lr: 2e-4
+    betas: [0.9, 0.95]
+    weight_decay: 0.0
   
+  # 学习率调度器
   scheduler:
-    name: cosine           # 学习率调度器
-    warmup_epochs: 5       # 预热 epoch 数
+    type: cosine
+    warmup_epochs: 1
+    decay_end_epoch: 16
+    base_lr: 2e-4
+    final_lr: 2e-5
+    warmup_from_zero: true
   
-  loss_weights:
-    reconstruction: 1.0    # 重建损失权重
-    perceptual: 0.1        # 感知损失权重
-    adversarial: 0.001     # 对抗损失权重
+  # EMA 配置
+  ema_decay: 0.9978
+  
+  # GAN 损失权重
+  disc_weight: 0.75
+  perceptual_weight: 1.0
+  disc_start_epoch: 8
+  disc_upd_start_epoch: 6
+  lpips_start_epoch: 0
+  
+  # 采样配置
+  sample_every: 2500  # 每 2500 步生成一次样本
+```
+
+### 判别器配置
+
+```yaml
+model:
+  disc_arch:
+    arch:
+      dino_ckpt_path: /home/project/models/discs/dino_vit_small_patch8_224.pth
+      ks: 9
+      norm_type: bn
+      using_spec_norm: true
+      recipe: S_8
+    augment:
+      prob: 1.0
+      cutout: 0.0
+  
+  disc_optimizer:
+    lr: 2e-4
+    betas: [0.9, 0.95]
+    weight_decay: 0.0
 ```
 
 ---
@@ -322,13 +357,12 @@ python src/train.py experiment=rae_dino ckpt_path="last"
 python src/train.py experiment=rae_dino ckpt_path="/path/to/checkpoint.ckpt"
 ```
 
-### 4. 仅评估
+### 4. DDP 训练问题
 
-加载模型进行评估：
-
-```bash
-python src/eval.py experiment=rae_dino ckpt_path="/path/to/checkpoint.ckpt"
-```
+确保：
+1. 所有 GPU 可见：`nvidia-smi`
+2. 检查 NCCL 版本兼容性
+3. 正确设置 batch_size（总 batch size = batch_size × num_gpus）
 
 ---
 
@@ -336,11 +370,13 @@ python src/eval.py experiment=rae_dino ckpt_path="/path/to/checkpoint.ckpt"
 
 | 配置类型 | 路径 |
 |---------|------|
-| 实验配置 | `configs/experiment/rae_dino.yaml` |
+| 单 GPU 实验 | `configs/experiment/rae_dino.yaml` |
+| 多 GPU 实验 | `configs/experiment/rae_ddp.yaml` |
 | 模型配置 | `configs/model/rae.yaml` |
 | 数据配置 | `configs/data/imagenet.yaml` |
-| 训练器配置 | `configs/trainer/default.yaml` / `configs/trainer/ddp.yaml` |
-| Logger 配置 | `configs/logger/tensorboard.yaml` |
+| 训练器配置 | `configs/trainer/default.yaml` |
+| DDP 训练器 | `configs/trainer/ddp.yaml` |
+| TensorBoard | `configs/logger/tensorboard.yaml` |
 | 回调配置 | `configs/callbacks/default.yaml` |
 
 ---
@@ -360,3 +396,20 @@ python src/eval.py experiment=rae_dino ckpt_path="/path/to/checkpoint.ckpt"
 2. 依赖是否完整安装
 3. GPU 驱动和 CUDA 版本是否兼容
 4. 配置参数是否合理
+5. 判别器 checkpoint 路径是否正确
+
+## 训练参数说明
+
+基于原始 RAE 配置文件 `RAE/configs/stage1/training/DINOv2-B_decXL.yaml`：
+
+| 参数 | 原始值 | 说明 |
+|------|--------|------|
+| epochs | 16 | 训练轮数 |
+| global_batch_size | 512 | 总 batch size |
+| num_workers | 8 | 数据加载进程数 |
+| lr | 2e-4 | 学习率 |
+| betas | [0.9, 0.95] | Adam 优化器参数 |
+| ema_decay | 0.9978 | EMA 衰减率 |
+| disc_weight | 0.75 | GAN 损失权重 |
+| disc_start_epoch | 8 | 开始使用判别器的 epoch |
+| sample_every | 2500 | 采样间隔（步数） |

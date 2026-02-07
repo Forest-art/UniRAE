@@ -1,23 +1,35 @@
-# RAE DDP Training Configuration
-# Uses Distributed Data Parallel (DDP) for multi-GPU training
-
 # @package _global_
+# RAE DINO DDP experiment configuration
+# Based on RAE/configs/stage1/training/DINOv2-B_decXL.yaml
 
 defaults:
-  - rae_dino
+  - override /data: imagenet
+  - override /model: rae
+  - override /callbacks: default
   - override /trainer: ddp
+  - override /logger: tensorboard
 
-# Override trainer settings for DDP
+# Experiment tags
+tags: ["rae", "dino", "ddp", "stage1"]
+
+# Random seed
+seed: 12345
+
+# Trainer configuration
+# Original: epochs=16
 trainer:
-  max_epochs: 100
+  max_epochs: 16
+  precision: 16  # Use mixed precision training (fp16)
   accumulate_grad_batches: 1
+  gradient_clip_val: null
+  val_check_interval: null  # Disable validation loop (RAE doesn't use validation during stage1 training)
+  check_val_every_n_epoch: null
 
-# Adjust batch size for distributed training
+# Data configuration
+# Original: global_batch_size=512, num_workers=8
+# For 8 GPUs: 512/8=64 per GPU
+# For 4 GPUs: 512/4=128 per GPU
+# Adjust based on your number of GPUs
 data:
-  batch_size: 32  # Per-GPU batch size
-  num_workers: 8  # More workers for better data loading
-
-# Model settings
-model:
-  use_ema: true
-  ema_decay: 0.9999
+  batch_size: 64  # For 8 GPUs: 512/8=64. Adjust based on your setup
+  num_workers: 8

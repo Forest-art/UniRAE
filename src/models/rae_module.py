@@ -6,6 +6,7 @@ This module wraps the original training logic while using Lightning's framework.
 from typing import Any, Dict, Optional, Tuple
 from pathlib import Path
 from collections import defaultdict
+import math
 
 import torch
 import torch.nn as nn
@@ -25,8 +26,12 @@ from .disc import (
 )
 
 
+
 class RAELitModule(LightningModule):
     """Lightning Module for RAE Stage-1 training with GAN and LPIPS losses."""
+    
+    # Storage for scheduler params that need dataloader
+    _scheduler_params = None
 
     def __init__(
         self,
@@ -330,8 +335,73 @@ class RAELitModule(LightningModule):
             weight_decay=disc_optimizer_config.get("weight_decay", 0.0),
         )
         
-        # Return both optimizers
-        return [gen_optimizer, disc_optimizer]
+        # Build schedulers if configured
+        gen_scheduler = None
+        disc_scheduler = None
+        
+        if self.hparams.scheduler:
+            gen_scheduler = self._build_scheduler(gen_optimizer, self.hparams.scheduler)
+        
+        if self.hparams.disc_scheduler:
+            disc_scheduler = self._build_scheduler(disc_optimizer, self.hparams.disc_scheduler)
+        
+        # Return optimizers and schedulers
+        gen_opt_dict = {"optimizer": gen_optimizer}
+        disc_opt_dict = {"optimizer": disc_optimizer}
+        
+        if gen_scheduler is not None:
+            gen_opt_dict["lr_scheduler"] = {"scheduler": gen_scheduler, "interval": "step"}
+        
+        if disc_scheduler is not None:
+            disc_opt_dict["lr_scheduler"] = {"scheduler": disc_scheduler, "interval": "step"}
+        
+        return [gen_opt_dict, disc_opt_dict]
+    
+    def _build_scheduler(self, optimizer: torch.optim.Optimizer, scheduler_config: dict):
+        """Build learning rate scheduler."""
+        scheduler_type = scheduler_config.get("type", "cosine")
+        
+        if scheduler_type == "cosine":
+            # Store params to use after dataloader is available
+            RAELitModule._scheduler_params = {
+                "warmup_epochs": scheduler_config.get("warmup_epochs", 0),
+                "decay_end_epoch": scheduler_config.get("decay_end_epoch", 16),
+                "base_lr": scheduler_config.get("base_lr", 2e-4),
+                "final_lr": scheduler_config.get("final_lr", 2e-5),
+                "warmup_from_zero": scheduler_config.get("warmup_from_zero", True),
+            }
+            
+            # Use a placeholder lambda that will use the class-level params
+            def lr_lambda(step):
+                if RAELitModule._steps_per_epoch is None:
+                    return 1.0
+                
+                params = RAELitModule._scheduler_params
+                steps_per_epoch = RAELitModule._steps_per_epoch
+                warmup_steps = params["warmup_epochs"] * steps_per_epoch
+                total_steps = params["decay_end_epoch"] * steps_per_epoch
+                base_lr = params["base_lr"]
+                final_lr = params["final_lr"]
+                
+                if step < warmup_steps:
+                    if params["warmup_from_zero"]:
+                        return (step + 1) / warmup_steps
+                    else:
+                        return 1.0
+                elif step < total_steps:
+                    progress = (step - warmup_steps) / (total_steps - warmup_steps)
+                    return final_lr / base_lr + 0.5 * (1 - final_lr / base_lr) * (1 + math.cos(math.pi * progress))
+                else:
+                    return final_lr / base_lr
+            
+            return LambdaLR(optimizer, lr_lambda)
+        else:
+            raise ValueError(f"Unsupported scheduler type: {scheduler_type}")
+    
+    def on_train_start(self):
+        """Called when training starts."""
+        # Set steps_per_epoch for schedulers after dataloader is available
+        RAELitModule._steps_per_epoch = len(self.trainer.train_dataloader)
     
     def on_train_batch_end(self, outputs, batch: Any, batch_idx: int) -> None:
         """Called after each training batch."""
@@ -342,6 +412,55 @@ class RAELitModule(LightningModule):
         if len(self.optimizers(use_pl_optimizer=False)) > 1:
             disc_opt = self.optimizers(use_pl_optimizer=False)[1]
             self.log("lr/discriminator", disc_opt.param_groups[0]["lr"])
+    
+    def on_train_batch_start(self, batch: Any, batch_idx: int) -> None:
+        """Called at the start of each training batch."""
+        # Generate samples at specified intervals
+        current_step = self.trainer.global_step
+        sample_every = self.hparams.sample_every
+        
+        if sample_every > 0 and current_step > 0 and current_step % sample_every == 0:
+            self._generate_samples(batch)
+    
+    def _generate_samples(self, batch: Any) -> None:
+        """Generate and log EMA samples."""
+        if self.trainer.local_rank != 0:
+            return
+        
+        images, _ = batch
+        images = images.to(self.device)
+        
+        try:
+            from torchvision.utils import make_grid
+            
+            with torch.no_grad():
+                # Only keep first 4 samples
+                sample_images = images[:4]
+                samples = self.ema_model.decode(self.ema_model.encode(sample_images))
+                
+                # Concat input and reconstruction
+                comparison = torch.cat([sample_images, samples], dim=0).cpu().float()
+                
+                # Reshape to grid (sample at first row, recon at second row)
+                n = sample_images.size(0)
+                grid = make_grid(comparison, nrow=n, normalize=True)
+                
+                # Log to TensorBoard
+                self.logger.experiment.add_image("samples/reconstruction", grid, self.trainer.global_step)
+        except Exception as e:
+            self.print(f"Error generating samples: {e}")
+    
+    def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
+        """Test step - compute reconstruction loss."""
+        images, _ = batch
+        images = images.to(self.device)
+        
+        with torch.no_grad():
+            recon = self.ema_model(images)
+            rec_loss = (recon - images).abs().mean()
+            
+        self.log("test/loss_recon", rec_loss)
+        return rec_loss
 
 
 if __name__ == "__main__":
