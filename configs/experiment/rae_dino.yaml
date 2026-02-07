@@ -22,8 +22,8 @@ trainer:
   precision: 16  # Use mixed precision training (fp16)
   accumulate_grad_batches: 1
   gradient_clip_val: null
-  val_check_interval: null  # Disable validation loop (RAE doesn't use validation during stage1 training)
-  check_val_every_n_epoch: null
+  val_check_interval: 1.0  # Run validation every epoch (needed for rFID callback)
+  check_val_every_n_epoch: 1
 
 # Data configuration
 # Original: global_batch_size=512, num_workers=8

@@ -9,29 +9,35 @@ from typing import Optional
 import numpy as np
 import torch
 from lightning.pytorch.callbacks import Callback
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from PIL import Image
 from tqdm import tqdm
 
 from torch_fidelity import calculate_metrics
 
 
-class ImageListDataset:
-    """Simple dataset for a list of PIL Images or numpy arrays."""
+class ImageListDataset(Dataset):
+    """Simple dataset for a list of PIL Images or numpy arrays.
+
+    Note: torch_fidelity requires the dataset to return torch.Tensor with dtype uint8.
+    """
     def __init__(self, images):
         self.images = images
-    
+
     def __len__(self):
         return len(self.images)
-    
+
     def __getitem__(self, idx):
         img = self.images[idx]
-        # Ensure PIL Image in RGB mode
+        # Convert to torch.Tensor (C, H, W) format with dtype uint8
         if isinstance(img, np.ndarray):
             if img.ndim == 3 and img.shape[2] == 3:  # HWC
-                img = Image.fromarray(img.astype(np.uint8))
+                img = torch.tensor(img.astype(np.uint8)).permute(2, 0, 1)
             elif img.ndim == 3 and img.shape[0] == 3:  # CHW
-                img = Image.fromarray(img.transpose(1, 2, 0).astype(np.uint8))
+                img = torch.tensor(img.astype(np.uint8))
+        elif isinstance(img, Image.Image):
+            img = np.array(img)
+            img = torch.tensor(img.astype(np.uint8)).permute(2, 0, 1)
         return img
 
 

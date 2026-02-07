@@ -27,4 +27,4 @@ rfid:
   rfid_output_dir: logs/rfid_samples
   rfid_save_samples: true
   save_samples_count: 64
-  use_train_dataloader: false  # Use validation set for rFID evaluation (configured in data config)
+  use_train_dataloader: true  # Fallback to train dataloader if validation set is not available
