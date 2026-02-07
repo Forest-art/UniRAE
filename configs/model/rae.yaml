@@ -49,10 +49,14 @@ disc_optimizer:
   betas: [0.9, 0.95]
   weight_decay: 0.0
 
-disc_scheduler: null
+# Discriminator learning rate scheduler (cosine annealing with warmup)
+disc_scheduler:
+  _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+  T_max: 15  # epochs - warmup_epochs = 16 - 1 = 15
+  eta_min: 2.0e-5  # final_lr
 
 # Image configuration
-image_size: 256
+image_size: 224
 
 # Sampling configuration
 sample_every: 2500
@@ -66,7 +70,11 @@ optimizer:
   betas: [0.9, 0.95]
   weight_decay: 0.0
 
-scheduler: null
+# Learning rate scheduler (cosine annealing with warmup)
+scheduler:
+  _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+  T_max: 15  # epochs - warmup_epochs = 16 - 1 = 15
+  eta_min: 2.0e-5  # final_lr
 
 # Precision
 precision: "fp32"

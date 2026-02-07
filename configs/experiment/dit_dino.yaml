@@ -1,0 +1,101 @@
+# @package _global_
+
+defaults:
+  - override /data: imagenet
+  - override /model: dit
+  - override /trainer: gpu
+  - override /callbacks: default
+  - override /logger: tensorboard
+  - override /hydra/sweeper: basic
+
+# Experiment name
+task_name: "dit_dino"
+
+# Data configuration (override defaults)
+data:
+  image_size: 256
+  batch_size: 32  # Per GPU batch size
+  num_workers: 8
+  train_split: 1.0  # Use all training data
+  pin_memory: true
+
+# Model configuration
+model:
+  _target_: src.models.dit_module.DiTModule
+  rae:
+    _target_: src.models.stage1.RAE
+    encoder_cls: 'Dinov2withNorm'
+    encoder_config_path: 'facebook/dinov2-with-registers-base'
+    encoder_input_size: 224
+    encoder_params:
+      dinov2_path: 'facebook/dinov2-with-registers-base'
+      normalize: true
+    decoder_config_path: 'models/decoders/dinov2/wReg_base/ViTXL'
+    pretrained_decoder_path: 'models/decoders/dinov2/wReg_base/ViTXL_n08/model.pt'
+    noise_tau: 0.0
+    reshape_to_2d: true
+    # Note: normalization_stat_path should be created from training data
+    # or use existing stats if available
+  dit:
+    _target_: src.models.stage2.DiTwDDTHead
+    input_size: 16
+    patch_size: 1
+    in_channels: 768
+    hidden_size: [1152, 2048]
+    depth: [28, 2]
+    num_heads: [16, 16]
+    mlp_ratio: 4.0
+    class_dropout_prob: 0.1
+    num_classes: 1000
+    use_qknorm: false
+    use_swiglu: true
+    use_rope: true
+    use_rmsnorm: true
+    wo_shift: false
+    use_pos_embed: true
+  dit_module:
+    ema_decay: 0.9995
+    learning_rate: 2.0e-4
+    weight_decay: 0.0
+    betas: [0.9, 0.95]
+    warmup_steps: 5000
+    max_steps: 100000
+    num_classes: 1000
+    null_label: 1000
+    latent_size: [768, 16, 16]
+    compile: false
+
+# Trainer configuration
+trainer:
+  max_epochs: 1400
+  gradient_clip_val: 1.0
+  accumulate_grad_batches: 1
+  precision: 16
+  check_val_every_n_epoch: 1
+  log_every_n_steps: 100
+
+# Callbacks
+callbacks:
+  model_checkpoint:
+    monitor: "val/loss"
+    mode: "min"
+    save_top_k: 3
+    save_last: true
+    every_n_epochs: 10
+
+# Paths
+paths:
+  root_dir: ${oc.env:PROJECT_ROOT,.}
+  data_dir: ${paths.root_dir}/data
+  log_dir: ${paths.root_dir}/logs
+  output_dir: ${hydra:runtime.cwd}/outputs
+
+# Hydra configuration
+hydra:
+  run:
+    dir: ${paths.log_dir}/runs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: ${paths.log_dir}/multiruns/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num}
+  mode: MULTIRUN
+  verbose: false

@@ -31,4 +31,4 @@ data:
 
 # Model configuration overrides
 model:
-  image_size: 378  # Must match encoder_input_size in rae_siglip.yaml
+  image_size: 224  # Must match encoder_input_size in rae_siglip.yaml (same as DINO v2)

@@ -1,0 +1,72 @@
+# @package _global_
+
+defaults:
+  - rae: rae_dino
+  - override hydra/launcher: cpu
+
+# RAE configuration (encoder is frozen)
+rae:
+  encoder_checkpoint_path: null  # Path to trained RAE checkpoint
+  encoder_trainable: false  # Freeze encoder
+  
+# DiT/DDT configuration
+dit:
+  target: src.models.stage2.DiTwDDTHead
+  params:
+    input_size: 16  # Latent spatial size (16x16)
+    patch_size: 1
+    in_channels: 768  # RAE latent channels
+    hidden_size: [1152, 2048]  # Encoder/Decoder hidden sizes
+    depth: [28, 2]  # Number of encoder/decoder blocks
+    num_heads: [16, 16]
+    mlp_ratio: 4.0
+    class_dropout_prob: 0.1
+    num_classes: 1000
+    use_qknorm: false
+    use_swiglu: true
+    use_rope: true
+    use_rmsnorm: true
+    wo_shift: false
+    use_pos_embed: true
+
+# Lightning Module configuration
+dit_module:
+  ema_decay: 0.9995
+  learning_rate: 2.0e-4
+  weight_decay: 0.0
+  betas: [0.9, 0.95]
+  warmup_steps: 5000
+  max_steps: 100000
+  num_classes: 1000
+  null_label: 1000
+  latent_size: [768, 16, 16]  # [C, H, W]
+  compile: false
+
+# Transport configuration (simplified)
+transport:
+  path_type: 'Linear'
+  prediction: 'velocity'
+  loss_weight: null
+  time_dist_type: 'logit-normal_0_1'
+
+# Sampling configuration
+sampler:
+  mode: ODE
+  sampling_method: 'euler'
+  num_steps: 50
+  atol: 1.0e-6
+  rtol: 1.0e-3
+  reverse: false
+
+# Guidance configuration
+guidance:
+  method: 'cfg'
+  scale: 1.0
+  t_min: 0.0
+  t_max: 1.0
+
+# Evaluation configuration
+eval:
+  eval_interval: 25000  # Steps
+  eval_model: true
+  fid_num_samples: 10000  # Number of samples for FID

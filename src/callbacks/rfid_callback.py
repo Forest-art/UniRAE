@@ -126,32 +126,27 @@ class RFIDCallback(Callback):
     
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
         """Called after each training batch."""
-        # Skip if not the main process (in DDP)
-        if trainer.is_global_zero is False:
-            return
-        
         # Skip if rfid_every_n_steps is 0
         if self.rfid_every_n_steps <= 0:
             return
         
-        # Check if it's time to evaluate
-        current_step = trainer.global_step
-        if current_step > 0 and current_step % self.rfid_every_n_steps == 0 and current_step != self.last_eval_step:
-            self._evaluate_rfid(trainer, pl_module, f"step_{current_step}")
-            self.last_eval_step = current_step
+        # Only evaluate on the main process, but gather data from all processes
+        if trainer.is_global_zero:
+            # Check if it's time to evaluate
+            current_step = trainer.global_step
+            if current_step > 0 and current_step % self.rfid_every_n_steps == 0 and current_step != self.last_eval_step:
+                self._evaluate_rfid(trainer, pl_module, f"step_{current_step}")
+                self.last_eval_step = current_step
     
     def on_train_epoch_end(self, trainer, pl_module):
         """Called at the end of each training epoch."""
-        # Skip if not the main process (in DDP)
-        if trainer.is_global_zero is False:
-            return
-        
-        # Skip if rfid_every_epoch is False
+        # Only evaluate on the main process, but gather data from all processes
         if not self.rfid_every_epoch:
             return
         
-        epoch = trainer.current_epoch
-        self._evaluate_rfid(trainer, pl_module, f"epoch_{epoch}")
+        if trainer.is_global_zero:
+            epoch = trainer.current_epoch
+            self._evaluate_rfid(trainer, pl_module, f"epoch_{epoch}")
     
     def _evaluate_rfid(self, trainer, pl_module, eval_name: str):
         """Evaluate rFID and log results."""
@@ -177,6 +172,9 @@ class RFIDCallback(Callback):
             print("[RFIDCallback] Error: Validation dataloader not found. rFID evaluation requires a validation set.")
             print("[RFIDCallback] Please ensure your datamodule has a validation set configured.")
             return
+        
+        # Check if using DDP
+        is_ddp = trainer.world_size > 1
         
         # Collect images
         original_images = []
@@ -211,6 +209,31 @@ class RFIDCallback(Callback):
                     # NCHW -> HWC
                     original_images.append(orig_np[i].transpose(1, 2, 0))
                     reconstructed_images.append(recon_np[i].transpose(1, 2, 0))
+        
+        # If using DDP, gather results from all processes
+        if is_ddp:
+            # Gather the number of images from each process
+            num_images = len(original_images)
+            num_images_list = [None] * trainer.world_size
+            torch.distributed.all_gather_object(num_images_list, num_images)
+            
+            # Gather all images
+            all_original_images = [None] * trainer.world_size
+            all_reconstructed_images = [None] * trainer.world_size
+            torch.distributed.all_gather_object(all_original_images, original_images)
+            torch.distributed.all_gather_object(all_reconstructed_images, reconstructed_images)
+            
+            # Combine results on the main process
+            if trainer.is_global_zero:
+                original_images = []
+                reconstructed_images = []
+                for proc_idx in range(trainer.world_size):
+                    original_images.extend(all_original_images[proc_idx])
+                    reconstructed_images.extend(all_reconstructed_images[proc_idx])
+                print(f"[RFIDCallback] Gathered {len(original_images)} samples from {trainer.world_size} GPUs")
+            else:
+                # Non-main processes can exit
+                return
         
         # Save sample images if requested
         if self.rfid_save_samples and self.rfid_output_dir is not None:

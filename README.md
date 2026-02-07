@@ -22,6 +22,7 @@
 ### 核心功能
 
 - ✅ **RAE 训练**: 支持 DINO v2 和 SigLIP2 作为编码器训练自编码器
+- ✅ **DiT 训练**: 在 RAE 潜空间中训练扩散模型，实现高质量图像生成
 - ✅ **分布式训练**: 原生支持 DDP (Distributed Data Parallel) 多 GPU 训练
 - ✅ **rFID 评测**: 训练过程中自动计算重建 FID 分数
 - ✅ **Linear Probing**: 评估编码器的表示学习质量
@@ -67,9 +68,9 @@ python src/train.py experiment=rae_siglip_dummy trainer=gpu
 ```
 
 **编码器差异说明**：
-- **DINO v2**: 默认图像尺寸 224×224，patch_size=14
-- **SigLIP2**: 默认图像尺寸 378×378，patch_size=14
-- 两者使用相同的训练参数和评估标准，仅编码器不同
+- **DINO v2**: 图像尺寸 224×224，patch_size=16
+- **SigLIP2**: 图像尺寸 224×224，patch_size=14（与 DINO v2 保持一致的输入尺寸，便于公平对比）
+- 两者使用相同的训练参数和评估标准，仅在编码器类型和 patch_size 上不同
 
 ### RAE 训练
 
@@ -104,7 +105,7 @@ python src/train.py experiment=rae_siglip \
 
 **重要说明**：
 - DINO v2 和 SigLIP2 使用完全相同的训练参数（epochs=16, lr=2e-4, global_batch_size=512）
-- 两者仅在编码器类型和默认图像尺寸上不同
+- 两者使用相同的图像尺寸（224×224），仅在编码器类型和 patch_size 上不同
 - rFID 评估、Linear Probing 评估方法完全一致
 
 ### Linear Probing 评估
@@ -120,6 +121,33 @@ python src/eval_linear_probe.py \
 python src/train.py experiment=linear_probe \
     model.encoder_checkpoint=logs/train/runs/XXXX/checkpoints/last.ckpt
 ```
+
+### DiT 训练 (Stage 2)
+
+DiT (Diffusion Transformer) 是 RAE 的第二阶段，在 RAE 潜空间中训练扩散模型以生成高质量图像。
+
+```bash
+# 小规模测试
+python src/train.py experiment=dit_dummy
+
+# 完整训练（需要先训练 RAE）
+python src/train.py experiment=dit_dino \
+    model.rae.encoder_checkpoint_path=/path/to/rae_checkpoint.ckpt
+
+# 多 GPU 训练
+python src/train.py experiment=dit_dino \
+    model.rae.encoder_checkpoint_path=/path/to/rae_checkpoint.ckpt \
+    trainer=ddp
+
+# 采样生成
+python src/eval_dit.py \
+    --checkpoint /path/to/dit_checkpoint.ckpt \
+    --num_samples 100 \
+    --cfg_scale 2.0 \
+    --output_dir outputs/samples
+```
+
+**注意**：DiT 训练需要先完成 RAE (Stage 1) 训练。详细信息请参考 [DiT 训练指南](docs/DIT_TRAINING_GUIDE.md)。
 
 <br>
 
@@ -438,9 +466,9 @@ python src/train.py experiment=rae_dino data.num_workers=8
 | 编码器 | 模型名称 | 图像尺寸 | Patch Size | 配置文件 |
 |--------|----------|----------|-----------|----------|
 | DINO v2 | facebook/dinov2-with-registers-base | 224 | 16 | configs/model/rae.yaml |
-| SigLIP2 | google/siglip-so400m-patch14-384 | 378 | 14 | configs/model/rae_siglip.yaml |
+| SigLIP2 | google/siglip-so400m-patch14-224 | 224 | 14 | configs/model/rae_siglip.yaml |
 
-**注意**：DINO v2 和 SigLIP2 使用完全相同的训练参数，仅在编码器类型和图像尺寸上有差异。
+**注意**：DINO v2 和 SigLIP2 使用完全相同的训练参数和图像尺寸，仅在编码器类型和 patch_size 上不同，便于公平对比。
 
 <br>
 

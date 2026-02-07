@@ -26,6 +26,6 @@ rfid:
   rfid_device: cuda
   rfid_output_dir: logs/rfid_samples
   rfid_save_samples: true
-  save_samples_count: 64
+  save_samples_count: 8
   use_train_dataloader: false  # Do not fall back to train dataloader
   use_full_validation_set: true  # Use all samples from validation set
