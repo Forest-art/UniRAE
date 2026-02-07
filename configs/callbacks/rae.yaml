@@ -12,7 +12,7 @@ model_checkpoint:
 
 model_summary:
   _target_: lightning.pytorch.callbacks.RichModelSummary
-  max_depth: -1
+  max_depth: 1  # Only print summary info, not all layer details
 
 rich_progress_bar:
   _target_: lightning.pytorch.callbacks.RichProgressBar

@@ -1,6 +1,6 @@
-# RAE DINO 训练指南
+# RAE 训练指南（支持 DINO v2 和 SigLIP2）
 
-本文档说明如何使用 lightning-hydra-template 框架训练 RAE (Reconstruction Autoencoder) 模型，使用 DINO v2 作为编码器。
+本文档说明如何使用 lightning-hydra-template 框架训练 RAE (Reconstruction Autoencoder) 模型，支持使用 DINO v2 或 SigLIP2 作为编码器。
 
 ## 目录
 - [环境配置](#环境配置)
@@ -118,21 +118,40 @@ train_split: 0.8  # 80% 训练，20% 验证
 
 在完整训练之前，建议先运行小规模测试确保配置正确：
 
-```bash
-# 使用测试数据集（少量图片）
-# 注意：确保 batch_size 小于测试数据集大小（data/test_hf 有 20 张图片）
-python src/train.py experiment=rae_dino data.data_dir=data/test_hf trainer=cpu data.batch_size=2 trainer.max_epochs=1
+#### DINO v2 测试
 
-# 使用更小的数据集测试GPU训练
-python src/train.py experiment=rae_dino data.data_dir=data/test_hf data.batch_size=2 trainer=gpu trainer.max_epochs=1
+```bash
+# 使用 dummy 数据集（推荐）
+python src/train.py experiment=rae_dummy
+
+# 测试 GPU 训练
+python src/train.py experiment=rae_dummy trainer=gpu
 ```
 
+#### SigLIP2 测试
+
+```bash
+# 使用 dummy 数据集（推荐）
+python src/train.py experiment=rae_siglip_dummy
+
+# 测试 GPU 训练
+python src/train.py experiment=rae_siglip_dummy trainer=gpu
+```
+
+**编码器差异说明**：
+- **DINO v2**: 默认图像尺寸 224×224，patch_size=16
+- **SigLIP2**: 默认图像尺寸 378×378，patch_size=14
+- 两者使用相同的训练参数和评估标准，仅编码器不同
+- 测试时建议使用 dummy 数据集，已预处理好测试数据
+
 **注意**：
-- 测试数据集 `data/test_hf` 只包含 20 张图片
-- 运行测试时，`batch_size` 必须小于或等于数据集大小
+- `rae_dummy` 和 `rae_siglip_dummy` 使用 `data/dummy_dataset_hf` 数据集
+- 运行测试时，显存占用较小，适合快速验证配置
 - 完整训练时需要指向真实的 ImageNet 数据集路径
 
 ### 单 GPU 训练
+
+#### DINO v2 单 GPU
 
 ```bash
 # 默认单 GPU 训练
@@ -142,7 +161,19 @@ python src/train.py experiment=rae_dino
 CUDA_VISIBLE_DEVICES=0 python src/train.py experiment=rae_dino
 ```
 
+#### SigLIP2 单 GPU
+
+```bash
+# 默认单 GPU 训练
+python src/train.py experiment=rae_siglip
+
+# 使用指定 GPU
+CUDA_VISIBLE_DEVICES=0 python src/train.py experiment=rae_siglip
+```
+
 ### 多 GPU DDP 训练
+
+#### DINO v2 多 GPU
 
 ```bash
 # 使用 8 个 GPU（默认配置）
@@ -158,12 +189,27 @@ python src/train.py experiment=rae_ddp data.batch_size=256
 torchrun --nproc_per_node=8 src/train.py experiment=rae_ddp
 ```
 
+#### SigLIP2 多 GPU
+
+```bash
+# 使用 8 个 GPU
+python src/train.py experiment=rae_siglip data.batch_size=64 trainer.strategy=ddp
+
+# 使用 4 个 GPU（调整 batch_size）
+python src/train.py experiment=rae_siglip data.batch_size=128 trainer.strategy=ddp
+
+# 使用 torchrun 启动
+torchrun --nproc_per_node=8 src/train.py experiment=rae_siglip data.batch_size=64
+```
+
 **batch_size 调整说明**：
 - 原始 RAE 配置：global_batch_size=512
 - 8 个 GPU：`batch_size=64` (512/8)
 - 4 个 GPU：`batch_size=128` (512/4)
 - 2 个 GPU：`batch_size=256` (512/2)
 - 1 个 GPU：`batch_size=512`（但显存可能不足）
+
+**重要**：DINO v2 和 SigLIP2 使用完全相同的训练参数，仅在编码器类型和图像尺寸上有差异。
 
 ---
 
@@ -174,30 +220,47 @@ torchrun --nproc_per_node=8 src/train.py experiment=rae_ddp
 Hydra 支持通过命令行覆盖任何配置参数：
 
 ```bash
-# 修改数据路径
+# DINO v2 - 修改数据路径
 python src/train.py experiment=rae_dino data.data_dir=/path/to/imagenet_hf
 
-# 修改图像尺寸
+# DINO v2 - 修改图像尺寸
 python src/train.py experiment=rae_dino data.image_size=256
 
-# 修改 batch size
+# DINO v2 - 修改 batch size
 python src/train.py experiment=rae_dino data.batch_size=32
 
-# 修改学习率
+# DINO v2 - 修改学习率
 python src/train.py experiment=rae_dino model.optimizer.lr=1e-4
 
-# 修改训练 epoch 数
+# DINO v2 - 修改训练 epoch 数
 python src/train.py experiment=rae_dino trainer.max_epochs=100
+
+# SigLIP2 - 修改数据路径
+python src/train.py experiment=rae_siglip data.data_dir=/path/to/imagenet_hf
+
+# SigLIP2 - 修改图像尺寸（注意：SigLIP 默认 378，可适当调整）
+python src/train.py experiment=rae_siglip data.image_size=378
+
+# SigLIP2 - 修改 batch size
+python src/train.py experiment=rae_siglip data.batch_size=32
 ```
 
 ### 组合配置覆盖
 
 ```bash
-# 同时修改多个参数
+# DINO v2 - 同时修改多个参数
 python src/train.py experiment=rae_dino \
     data.data_dir=/path/to/imagenet_hf \
     data.batch_size=64 \
     data.image_size=224 \
+    model.optimizer.lr=2e-4 \
+    trainer.max_epochs=200
+
+# SigLIP2 - 同时修改多个参数
+python src/train.py experiment=rae_siglip \
+    data.data_dir=/path/to/imagenet_hf \
+    data.batch_size=64 \
+    data.image_size=378 \
     model.optimizer.lr=2e-4 \
     trainer.max_epochs=200
 ```
@@ -208,11 +271,11 @@ python src/train.py experiment=rae_dino \
 
 ### 实验配置文件说明
 
-项目提供了两个主要的实验配置：
+项目提供了四个主要的实验配置（DINO v2 和 SigLIP2 各两个）：
 
-#### 1. `configs/experiment/rae_dino.yaml` (单 GPU)
+#### 1. `configs/experiment/rae_dino.yaml` (DINO 单 GPU)
 
-适用于单 GPU 训练的基本配置：
+适用于 DINO v2 单 GPU 训练的基本配置：
 
 ```yaml
 defaults:
@@ -232,9 +295,9 @@ trainer:
   precision: 16  # 使用 fp16 混合精度
 ```
 
-#### 2. `configs/experiment/rae_ddp.yaml` (多 GPU)
+#### 2. `configs/experiment/rae_ddp.yaml` (DINO 多 GPU)
 
-适用于 DDP 多 GPU 训练的配置：
+适用于 DINO v2 DDP 多 GPU 训练的配置：
 
 ```yaml
 defaults:
@@ -255,13 +318,60 @@ trainer:
   strategy: ddp  # 使用 DDP 策略
 ```
 
+#### 3. `configs/experiment/rae_siglip.yaml` (SigLIP 单 GPU)
+
+适用于 SigLIP2 单 GPU 训练的基本配置：
+
+```yaml
+defaults:
+  - model: rae_siglip
+  - data: imagenet
+  - trainer: default
+  - logger: tensorboard
+  - callbacks: default
+
+data:
+  batch_size: 128  # 单 GPU 的 batch size
+  num_workers: 8
+  image_size: 378  # SigLIP 默认图像尺寸
+
+trainer:
+  max_epochs: 16
+  precision: 16
+```
+
+#### 4. `configs/experiment/rae_siglip_dummy.yaml` (SigLIP 测试)
+
+适用于 SigLIP2 快速测试的配置：
+
+```yaml
+defaults:
+  - model: rae_siglip
+  - data: imagenet
+  - trainer: default
+  - logger: tensorboard
+  - callbacks: no_checkpoint
+
+data:
+  data_dir: data/dummy_dataset_hf
+  batch_size: 8
+  num_workers: 2
+  image_size: 378
+
+trainer:
+  max_epochs: 2
+  precision: 16
+  limit_train_batches: 0.1  # 使用 10% 数据
+  limit_val_batches: 0.5
+```
+
 ---
 
 ## 模型配置详情
 
 ### 编码器配置
 
-在 `configs/model/rae.yaml` 中配置编码器：
+#### DINO v2 配置 (`configs/model/rae.yaml`)
 
 ```yaml
 model:
@@ -272,6 +382,28 @@ model:
     dinov2_path: facebook/dinov2-with-registers-base
     normalize: true
 ```
+
+#### SigLIP2 配置 (`configs/model/rae_siglip.yaml`)
+
+```yaml
+model:
+  encoder_cls: SigLIP2wNorm
+  encoder_config_path: google/siglip-so400m-patch14-384
+  encoder_input_size: 378
+  encoder_params:
+    model_name: google/siglip-so400m-patch14-384
+    num_tokens: 256
+```
+
+### 编码器对比
+
+| 特性 | DINO v2 | SigLIP2 |
+|------|---------|---------|
+| 模型 | facebook/dinov2-with-registers-base | google/siglip-so400m-patch14-384 |
+| 输入尺寸 | 224 | 378 |
+| Patch Size | 16 | 14 |
+| 特征维度 | 768 | 1152 |
+| 配置文件 | configs/model/rae.yaml | configs/model/rae_siglip.yaml |
 
 ### 解码器配置
 
@@ -525,16 +657,21 @@ python src/train.py experiment=rae_dino ckpt_path="/path/to/checkpoint.ckpt"
 
 ## 配置文件位置速查
 
+| 配置类型 | DINO v2 | SigLIP2 |
+|---------|---------|----------|
+| 单 GPU 实验 | `configs/experiment/rae_dino.yaml` | `configs/experiment/rae_siglip.yaml` |
+| 多 GPU 实验 | `configs/experiment/rae_ddp.yaml` | 使用 `rae_siglip.yaml` + `trainer.strategy=ddp` |
+| 测试配置 | `configs/experiment/rae_dummy.yaml` | `configs/experiment/rae_siglip_dummy.yaml` |
+| 模型配置 | `configs/model/rae.yaml` | `configs/model/rae_siglip.yaml` |
+
 | 配置类型 | 路径 |
 |---------|------|
-| 单 GPU 实验 | `configs/experiment/rae_dino.yaml` |
-| 多 GPU 实验 | `configs/experiment/rae_ddp.yaml` |
-| 模型配置 | `configs/model/rae.yaml` |
 | 数据配置 | `configs/data/imagenet.yaml` |
 | 训练器配置 | `configs/trainer/default.yaml` |
 | DDP 训练器 | `configs/trainer/ddp.yaml` |
 | TensorBoard | `configs/logger/tensorboard.yaml` |
-| 回调配置 | `configs/callbacks/default.yaml` |
+| RAE 回调 | `configs/callbacks/rae.yaml` |
+| rFID 回调 | `configs/callbacks/rfid.yaml` |
 
 ---
 
@@ -557,7 +694,9 @@ python src/train.py experiment=rae_dino ckpt_path="/path/to/checkpoint.ckpt"
 
 ## 训练参数说明
 
-基于原始 RAE 配置文件 `RAE/configs/stage1/training/DINOv2-B_decXL.yaml`：
+### 通用训练参数（DINO v2 和 SigLIP2 均适用）
+
+基于原始 RAE 配置文件，DINO v2 和 SigLIP2 使用完全相同的训练参数：
 
 | 参数 | 原始值 | 说明 |
 |------|--------|------|
@@ -570,3 +709,12 @@ python src/train.py experiment=rae_dino ckpt_path="/path/to/checkpoint.ckpt"
 | disc_weight | 0.75 | GAN 损失权重 |
 | disc_start_epoch | 8 | 开始使用判别器的 epoch |
 | sample_every | 2500 | 采样间隔（步数） |
+
+### 编码器差异
+
+| 编码器 | 模型名称 | 图像尺寸 | Patch Size | 配置文件 |
+|--------|----------|----------|-----------|----------|
+| DINO v2 | facebook/dinov2-with-registers-base | 224 | 16 | configs/model/rae.yaml |
+| SigLIP2 | google/siglip-so400m-patch14-384 | 378 | 14 | configs/model/rae_siglip.yaml |
+
+**重要**：DINO v2 和 SigLIP2 使用完全相同的训练参数，仅在编码器类型和图像尺寸上有差异。训练逻辑、评估方法和 rFID 评测完全一致。

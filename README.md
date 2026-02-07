@@ -21,7 +21,7 @@
 
 ### 核心功能
 
-- ✅ **RAE 训练**: 使用 DINO v2、MAE 或 SigLIP2 作为编码器训练自编码器
+- ✅ **RAE 训练**: 支持 DINO v2 和 SigLIP2 作为编码器训练自编码器
 - ✅ **分布式训练**: 原生支持 DDP (Distributed Data Parallel) 多 GPU 训练
 - ✅ **rFID 评测**: 训练过程中自动计算重建 FID 分数
 - ✅ **Linear Probing**: 评估编码器的表示学习质量
@@ -53,14 +53,27 @@ pip install -r requirements.txt
 在完整训练之前，建议先运行小规模测试确保配置正确：
 
 ```bash
-# 使用测试数据集（少量图片）
-python src/train.py experiment=rae_dummy trainer=cpu
+# DINO v2 - 使用测试数据集（少量图片）
+python src/train.py experiment=rae_dummy
 
-# 测试 GPU 训练
+# DINO v2 - 测试 GPU 训练
 python src/train.py experiment=rae_dummy trainer=gpu
+
+# SigLIP2 - 使用测试数据集
+python src/train.py experiment=rae_siglip_dummy
+
+# SigLIP2 - 测试 GPU 训练
+python src/train.py experiment=rae_siglip_dummy trainer=gpu
 ```
 
+**编码器差异说明**：
+- **DINO v2**: 默认图像尺寸 224×224，patch_size=14
+- **SigLIP2**: 默认图像尺寸 378×378，patch_size=14
+- 两者使用相同的训练参数和评估标准，仅编码器不同
+
 ### RAE 训练
+
+#### DINO v2 训练
 
 ```bash
 # 单 GPU 训练
@@ -75,6 +88,24 @@ python src/train.py experiment=rae_dino \
     data.batch_size=128 \
     model.optimizer.lr=2e-4
 ```
+
+#### SigLIP2 训练
+
+```bash
+# 单 GPU 训练
+python src/train.py experiment=rae_siglip
+
+# 自定义参数训练
+python src/train.py experiment=rae_siglip \
+    data.data_dir=/path/to/imagenet_hf \
+    data.batch_size=128 \
+    model.optimizer.lr=2e-4
+```
+
+**重要说明**：
+- DINO v2 和 SigLIP2 使用完全相同的训练参数（epochs=16, lr=2e-4, global_batch_size=512）
+- 两者仅在编码器类型和默认图像尺寸上不同
+- rFID 评估、Linear Probing 评估方法完全一致
 
 ### Linear Probing 评估
 
@@ -125,12 +156,15 @@ lightning-hydra-template/
 │   ├── data/                # 数据配置
 │   │   └── imagenet.yaml    # ImageNet 数据集配置
 │   ├── experiment/          # 实验配置
-│   │   ├── rae_dino.yaml    # DINO 训练配置（单 GPU）
-│   │   ├── rae_ddp.yaml     # DDP 训练配置（多 GPU）
-│   │   ├── rae_dummy.yaml   # Dummy data 测试配置
-│   │   └── linear_probe.yaml # Linear Probing 配置
+│   │   ├── rae_dino.yaml        # DINO 训练配置（单 GPU）
+│   │   ├── rae_ddp.yaml         # DDP 训练配置（多 GPU）
+│   │   ├── rae_dummy.yaml       # DINO dummy 测试配置
+│   │   ├── rae_siglip.yaml      # SigLIP 训练配置
+│   │   ├── rae_siglip_dummy.yaml # SigLIP dummy 测试配置
+│   │   └── linear_probe.yaml    # Linear Probing 配置
 │   ├── model/               # 模型配置
-│   │   ├── rae.yaml         # RAE 模型配置
+│   │   ├── rae.yaml         # RAE 模型配置（DINO v2）
+│   │   ├── rae_siglip.yaml  # RAE 模型配置（SigLIP2）
 │   │   └── linear_probe.yaml # Linear Probe 配置
 │   ├── trainer/             # 训练器配置
 │   │   ├── default.yaml     # 默认训练器
@@ -385,7 +419,7 @@ python src/train.py experiment=rae_dino data.num_workers=8
 
 ## 🎯 训练参数说明
 
-基于原始 RAE 配置文件：
+### 通用训练参数（DINO v2 和 SigLIP2 均适用）
 
 | 参数 | 原始值 | 说明 |
 |------|--------|------|
@@ -398,6 +432,15 @@ python src/train.py experiment=rae_dino data.num_workers=8
 | disc_weight | 0.75 | GAN 损失权重 |
 | disc_start_epoch | 8 | 开始使用判别器的 epoch |
 | sample_every | 2500 | 采样间隔（步数） |
+
+### 编码器差异
+
+| 编码器 | 模型名称 | 图像尺寸 | Patch Size | 配置文件 |
+|--------|----------|----------|-----------|----------|
+| DINO v2 | facebook/dinov2-with-registers-base | 224 | 16 | configs/model/rae.yaml |
+| SigLIP2 | google/siglip-so400m-patch14-384 | 378 | 14 | configs/model/rae_siglip.yaml |
+
+**注意**：DINO v2 和 SigLIP2 使用完全相同的训练参数，仅在编码器类型和图像尺寸上有差异。
 
 <br>
 

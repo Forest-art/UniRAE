@@ -5,14 +5,14 @@ _target_: src.models.rae_module.RAELitModule
 # RAE configuration - SigLIP encoder
 encoder_cls: 'SigLIP2wNorm'
 encoder_config_path: 'google/siglip-so400m-patch14-384'
-encoder_input_size: 384
+encoder_input_size: 378
 # SigLIP-specific encoder parameters
 encoder_params:
   model_name: 'google/siglip-so400m-patch14-384'
   num_tokens: 256
 
 decoder_config_path: '${paths.root_dir}/configs/decoder/ViTXL/config.json'
-decoder_patch_size: 16
+decoder_patch_size: 14  # Must match encoder_patch_size for SigLIP (14)
 pretrained_decoder_path: null
 noise_tau: 0.8
 reshape_to_2d: true
@@ -53,7 +53,7 @@ disc_optimizer:
 disc_scheduler: null
 
 # Image configuration
-image_size: 256
+image_size: 378
 
 # Sampling configuration
 sample_every: 2500

@@ -98,14 +98,14 @@ class RFIDCallback(Callback):
         Args:
             rfid_every_n_steps: Evaluate rFID every N training steps (0 to disable)
             rfid_every_epoch: Evaluate rFID at the end of each epoch
-            rfid_num_samples: Number of samples to use for rFID evaluation (None to use full dataset)
+            rfid_num_samples: Number of samples to use for rFID evaluation (None or use_full_validation_set=True to use full dataset)
             rfid_batch_size: Batch size for FID computation
             rfid_device: Device to use for computation
             rfid_output_dir: Directory to save sample images (None to disable)
-            rfid_save_samples: Whether to save sample images
+            rfid_save_samples: Whether to save sample images (for debugging/visualization, does not affect rFID computation)
             save_samples_count: Number of sample pairs to save
             use_train_dataloader: Use train dataloader for rFID if validation dataloader is not available (default False)
-            use_full_validation_set: If True, use all samples from validation set; if False, use rfid_num_samples (default False)
+            use_full_validation_set: If True, use all samples from validation set regardless of rfid_num_samples; if False, use rfid_num_samples (default False)
         """
         super().__init__()
         self.rfid_every_n_steps = rfid_every_n_steps
@@ -184,12 +184,15 @@ class RFIDCallback(Callback):
         
         device = self.rfid_device
         
+        # Determine if we should limit samples
+        limit_samples = not self.use_full_validation_set and self.rfid_num_samples is not None
+        max_samples = self.rfid_num_samples if limit_samples else float('inf')
+        
         with torch.no_grad():
             for batch in tqdm(dataloader, desc=f"Collecting samples for {eval_name} ({dataloader_type} set)", leave=False):
-                # If using full dataset, collect all samples; otherwise stop at rfid_num_samples
-                if not self.use_full_validation_set and self.rfid_num_samples is not None:
-                    if len(original_images) >= self.rfid_num_samples:
-                        break
+                # Stop if we've collected enough samples (only when limiting)
+                if limit_samples and len(original_images) >= max_samples:
+                    break
                 
                 images, _ = batch
                 images = images.to(device)
@@ -203,7 +206,7 @@ class RFIDCallback(Callback):
                 
                 # Append individual images
                 for i in range(images.size(0)):
-                    if len(original_images) >= self.rfid_num_samples:
+                    if limit_samples and len(original_images) >= max_samples:
                         break
                     # NCHW -> HWC
                     original_images.append(orig_np[i].transpose(1, 2, 0))

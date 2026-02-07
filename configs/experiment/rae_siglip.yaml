@@ -31,10 +31,4 @@ data:
 
 # Model configuration overrides
 model:
-  image_size: 256
-# Callbacks configuration
-callbacks:
-  rfid:
-    rfid_every_n_steps: 1000
-    rfid_every_epoch: true
-    rfid_num_samples: 1000
+  image_size: 378  # Must match encoder_input_size in rae_siglip.yaml

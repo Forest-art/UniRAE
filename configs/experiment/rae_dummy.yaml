@@ -3,7 +3,7 @@
 defaults:
   - override /data: imagenet
   - override /model: rae
-  - override /callbacks: rae
+  - override /callbacks: no_checkpoint
   - override /trainer: default
 
 tags: ["rae", "dummy_test"]
@@ -25,23 +25,12 @@ model:
   optimizer:
     lr: 2e-4
 
-# Callback settings
+# Callback settings (inheriting from configs/callbacks/no_checkpoint.yaml)
 callbacks:
-  model_checkpoint:
-    monitor: "val/loss_recon"
-  model_summary:
-    max_depth: 1  # Only print summary info, not all layers
   rfid:
     rfid_every_n_steps: 20  # Evaluate every 20 steps for testing
-    rfid_every_epoch: true  # Evaluate at end of each epoch
-    rfid_num_samples: 50  # Fewer samples for quick testing (when use_full_validation_set=false)
-    rfid_batch_size: 32
-    rfid_device: cuda
-    rfid_output_dir: logs/rfid_samples
-    rfid_save_samples: true
-    save_samples_count: 16
-    use_train_dataloader: false  # Require validation set
-    use_full_validation_set: false  # Use 50 samples for quick testing
+    use_full_validation_set: true  # Use entire validation set for rFID evaluation
+    rfid_save_samples: false  # Don't save sample images (online evaluation only)
 
 # Trainer settings
 trainer:
@@ -54,6 +43,7 @@ trainer:
   log_every_n_steps: 5
   deterministic: false
   accumulate_grad_batches: 1
+  enable_checkpointing: false  # Disable checkpointing to save disk space
 
 # Disable test for quick testing
 test: false

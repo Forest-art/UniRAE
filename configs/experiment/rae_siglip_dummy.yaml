@@ -1,53 +1,49 @@
 # @package _global_
-# RAE SigLIP dummy test configuration
-# Quick test with dummy dataset
-
+# RAE SigLIP training with dummy dataset for testing and debugging
 defaults:
   - override /data: imagenet
   - override /model: rae_siglip
-  - override /callbacks: rae
-  - override /trainer: gpu
-  - override /logger: tensorboard
+  - override /callbacks: no_checkpoint
+  - override /trainer: default
 
-# Experiment tags
-tags: ["rae", "siglip", "dummy", "test"]
+tags: ["rae", "siglip", "dummy_test"]
 
-# Random seed
-seed: 12345
-
-# Trainer configuration - short test
-trainer:
-  max_epochs: 2
-  precision: 16
-  accumulate_grad_batches: 1
-  gradient_clip_val: null
-  val_check_interval: 1.0
-  check_val_every_n_epoch: 1
-
-# Data configuration - dummy dataset
+# Data settings for dummy dataset
 data:
   data_dir: data/dummy_dataset_hf
-  batch_size: 8
-  num_workers: 2
-  pin_memory: false
-  train_split: 1.0
   use_hf_dataset: true
   hf_split: train
   hf_validation_split: validation
+  image_size: 378  # Must match encoder_input_size in rae_siglip.yaml
+  batch_size: 8  # Small batch size for dummy data
+  num_workers: 2
+  pin_memory: false
+  train_split: 1.0  # Use all train split data (validation is separate split)
 
-# Model configuration overrides
+# Model settings
 model:
-  image_size: 256
-  sample_every: 20  # Sample more frequently for testing
-  disc_start_epoch: 1  # Start earlier for testing
-# Callbacks configuration - test with smaller samples
+  optimizer:
+    lr: 2e-4
+
+# Callback settings (inheriting from configs/callbacks/no_checkpoint.yaml)
 callbacks:
-  model_checkpoint:
-    save_last: false  # Don't save checkpoint to avoid disk space issues
   rfid:
-    rfid_every_n_steps: 20
-    rfid_every_epoch: true
-    rfid_num_samples: 50
-    rfid_batch_size: 32
-    rfid_save_samples: true
-    save_samples_count: 16
+    rfid_every_n_steps: 20  # Evaluate every 20 steps for testing
+    use_full_validation_set: true  # Use entire validation set for rFID evaluation
+    rfid_save_samples: false  # Don't save sample images (online evaluation only)
+
+# Trainer settings
+trainer:
+  max_epochs: 2
+  precision: 16
+  accelerator: auto
+  devices: auto
+  limit_train_batches: 0.1  # Use only 10% of data for quick testing
+  limit_val_batches: 0.5   # Use 50% of validation data
+  log_every_n_steps: 5
+  deterministic: false
+  accumulate_grad_batches: 1
+  enable_checkpointing: false  # Disable checkpointing to save disk space
+
+# Disable test for quick testing
+test: false
