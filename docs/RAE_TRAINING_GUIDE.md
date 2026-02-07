@@ -334,7 +334,10 @@ rfid:
   rfid_output_dir: logs/rfid_samples  # 保存样本的目录
   rfid_save_samples: true        # 是否保存样本图像
   save_samples_count: 64         # 保存的样本对数量
+  use_train_dataloader: true      # 没有验证集时使用训练集评测（RAE默认没有验证集）
 ```
+
+**注意**: RAE 训练默认不使用验证集，因此 `use_train_dataloader` 默认为 `true`，会在训练集上进行 rFID 评测。这可以实时监控重建质量，但要注意 rFID 分数可能与在独立测试集上的结果略有不同。
 
 ### rFID 结果查看
 

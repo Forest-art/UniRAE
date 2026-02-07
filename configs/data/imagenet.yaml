@@ -12,9 +12,10 @@ image_size: 256
 batch_size: 16
 num_workers: 8
 pin_memory: true
-train_split: 1.0  # Use all data for training (no validation split)
+train_split: 1.0  # Use all data from train split (separate validation split used)
 seed: 42
 
 # HuggingFace dataset configuration
 use_hf_dataset: true  # Set to false for ImageFolder format
-hf_split: "train"  # Which split to use ('train' or 'validation')
+hf_split: "train"  # Training split ('train')
+hf_validation_split: "validation"  # Validation split ('validation')

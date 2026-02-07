@@ -83,6 +83,7 @@ class RFIDCallback(Callback):
         rfid_output_dir: Optional[str] = None,
         rfid_save_samples: bool = False,
         save_samples_count: int = 64,
+        use_train_dataloader: bool = True,
     ):
         """
         Initialize RFIDEvalCallback.
@@ -96,6 +97,7 @@ class RFIDCallback(Callback):
             rfid_output_dir: Directory to save sample images (None to disable)
             rfid_save_samples: Whether to save sample images
             save_samples_count: Number of sample pairs to save
+            use_train_dataloader: Use train dataloader for rFID if validation dataloader is not available
         """
         super().__init__()
         self.rfid_every_n_steps = rfid_every_n_steps
@@ -106,6 +108,7 @@ class RFIDCallback(Callback):
         self.rfid_output_dir = rfid_output_dir
         self.rfid_save_samples = rfid_save_samples
         self.save_samples_count = save_samples_count
+        self.use_train_dataloader = use_train_dataloader
     
     def on_train_start(self, trainer, pl_module):
         """Called when training starts."""
@@ -156,11 +159,16 @@ class RFIDCallback(Callback):
         
         eval_model.eval()
         
-        # Get validation dataloader
+        # Get validation dataloader, fallback to train dataloader if not available
         if trainer.val_dataloaders is not None:
             dataloader = trainer.val_dataloaders
+            dataloader_type = "validation"
+        elif self.use_train_dataloader and trainer.train_dataloader is not None:
+            dataloader = trainer.train_dataloader
+            dataloader_type = "training"
+            print("[RFIDCallback] Using training dataloader for rFID evaluation (no validation set available)")
         else:
-            print("[RFIDCallback] Warning: No validation dataloader found, skipping rFID evaluation")
+            print("[RFIDCallback] Warning: No dataloader found for rFID evaluation")
             return
         
         # Collect images
@@ -170,7 +178,7 @@ class RFIDCallback(Callback):
         device = self.rfid_device
         
         with torch.no_grad():
-            for batch in tqdm(dataloader, desc=f"Collecting samples for {eval_name}", leave=False):
+            for batch in tqdm(dataloader, desc=f"Collecting samples for {eval_name} ({dataloader_type} set)", leave=False):
                 if len(original_images) >= self.rfid_num_samples:
                     break
                 

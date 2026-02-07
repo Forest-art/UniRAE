@@ -64,6 +64,7 @@ class ImageFolderDataModule(LightningDataModule):
         seed: int = 42,
         use_hf_dataset: bool = False,
         hf_split: str = "train",
+        hf_validation_split: Optional[str] = None,
     ) -> None:
         """Initialize ImageFolderDataModule.
         
@@ -79,6 +80,7 @@ class ImageFolderDataModule(LightningDataModule):
             seed: Random seed for reproducibility.
             use_hf_dataset: Whether to use HuggingFace dataset format (True) or ImageFolder (False).
             hf_split: Which split to use for HuggingFace dataset ('train' or 'validation').
+            hf_validation_split: Validation split for HuggingFace dataset ('train' and 'validation' are separate splits).
         """
         super().__init__()
         
@@ -150,29 +152,65 @@ class ImageFolderDataModule(LightningDataModule):
                     f"Split '{self.hf_split}' not found in dataset at {self.data_dir}. "
                     f"Available: {list(hf_dataset.keys())}"
                 )
-            current_dataset = hf_dataset[self.hf_split]
+            
+            # Check if using separate validation split
+            if self.hf_validation_split is not None:
+                if self.hf_validation_split not in hf_dataset:
+                    raise ValueError(
+                        f"Validation split '{self.hf_validation_split}' not found in dataset at {self.data_dir}. "
+                        f"Available: {list(hf_dataset.keys())}"
+                    )
+                # Use separate train and validation splits
+                train_hf = hf_dataset[self.hf_split]
+                val_hf = hf_dataset[self.hf_validation_split]
+                
+                self.train_dataset = HFImageNetDataset(train_hf, transform=self.train_transform)
+                self.val_dataset = HFImageNetDataset(val_hf, transform=self.val_transform)
+                print(f"[ImageFolderDataModule] Using separate splits: train={len(train_hf)}, val={len(val_hf)}")
+            else:
+                # Use single split and potentially split it
+                current_dataset = hf_dataset[self.hf_split]
+                
+                # Create wrapped dataset
+                if self.train_split < 1.0:
+                    # Need to split the dataset
+                    total_size = len(current_dataset)
+                    train_size = int(total_size * self.train_split)
+                    val_size = total_size - train_size
+                    
+                    # Split the HuggingFace dataset
+                    train_hf = current_dataset.select(range(train_size))
+                    val_hf = current_dataset.select(range(train_size, total_size))
+                    
+                    # Create wrapped datasets
+                    self.train_dataset = HFImageNetDataset(train_hf, transform=self.train_transform)
+                    self.val_dataset = HFImageNetDataset(val_hf, transform=self.val_transform)
+                else:
+                    # Use all data for training
+                    self.train_dataset = HFImageNetDataset(current_dataset, transform=self.train_transform)
+                    self.val_dataset = None
         else:
             # Single Dataset - use it directly
             current_dataset = hf_dataset
-        
-        # Create wrapped dataset
-        if self.train_split < 1.0:
-            # Need to split the dataset
-            total_size = len(current_dataset)
-            train_size = int(total_size * self.train_split)
-            val_size = total_size - train_size
             
-            # Split the HuggingFace dataset
-            train_hf = current_dataset.select(range(train_size))
-            val_hf = current_dataset.select(range(train_size, total_size))
-            
-            # Create wrapped datasets
-            self.train_dataset = HFImageNetDataset(train_hf, transform=self.train_transform)
-            self.val_dataset = HFImageNetDataset(val_hf, transform=self.val_transform)
-        else:
-            # Use all data for training
-            self.train_dataset = HFImageNetDataset(current_dataset, transform=self.train_transform)
-            self.val_dataset = None
+            # Create wrapped dataset
+            if self.train_split < 1.0:
+                # Need to split the dataset
+                total_size = len(current_dataset)
+                train_size = int(total_size * self.train_split)
+                val_size = total_size - train_size
+                
+                # Split the HuggingFace dataset
+                train_hf = current_dataset.select(range(train_size))
+                val_hf = current_dataset.select(range(train_size, total_size))
+                
+                # Create wrapped datasets
+                self.train_dataset = HFImageNetDataset(train_hf, transform=self.train_transform)
+                self.val_dataset = HFImageNetDataset(val_hf, transform=self.val_transform)
+            else:
+                # Use all data for training
+                self.train_dataset = HFImageNetDataset(current_dataset, transform=self.train_transform)
+                self.val_dataset = None
     
     def _setup_imagefolder_dataset(self) -> None:
         """Setup ImageFolder dataset."""
