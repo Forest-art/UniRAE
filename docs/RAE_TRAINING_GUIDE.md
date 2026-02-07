@@ -291,6 +291,113 @@ model:
 
 ---
 
+## rFID 评测
+
+### 边训边评 (推荐)
+
+RAE 训练配置已集成 rFID 评测 Callback，可以在训练过程中自动评测 rFID：
+
+```bash
+# 使用默认配置训练（每 1000 步和每个 epoch 结束时评测 rFID）
+python src/train.py experiment=rae_dino
+
+# 自定义 rFID 评测频率
+python src/train.py experiment=rae_dino \
+    callbacks.rfid.rfid_every_n_steps=500 \
+    callbacks.rfid.rfid_every_epoch=true
+
+# 仅在 epoch 结束时评测
+python src/train.py experiment=rae_dino \
+    callbacks.rfid.rfid_every_n_steps=0 \
+    callbacks.rfid.rfid_every_epoch=true
+
+# 修改评测样本数和设备
+python src/train.py experiment=rae_dino \
+    callbacks.rfid.rfid_num_samples=500 \
+    callbacks.rfid.rfid_device=cuda \
+    callbacks.rfid.rfid_save_samples=true \
+    callbacks.rfid.save_samples_count=32
+```
+
+### rFID Callback 配置参数
+
+在 `configs/callbacks/rae.yaml` 中可以调整以下参数：
+
+```yaml
+rfid:
+  _target_: src.callbacks.rfid_callback.RFIDCallback
+  rfid_every_n_steps: 1000      # 每 N 步评测一次（0 表示禁用）
+  rfid_every_epoch: true          # 每个 epoch 结束时评测
+  rfid_num_samples: 1000         # 评测使用的样本数
+  rfid_batch_size: 64            # FID 计算的批大小
+  rfid_device: cuda              # 计算设备
+  rfid_output_dir: logs/rfid_samples  # 保存样本的目录
+  rfid_save_samples: true        # 是否保存样本图像
+  save_samples_count: 64         # 保存的样本对数量
+```
+
+### rFID 结果查看
+
+- **TensorBoard**: rFID 分数会自动记录到 TensorBoard，可以通过 `rfid/score` 查看
+- **样本图像**: 如果启用了 `rfid_save_samples`，原始图像和重建图像会保存在 `logs/rfid_samples/step_XXX/` 或 `logs/rfid_samples/epoch_XXX/` 目录下
+- **训练日志**: rFID 评测的详细信息会打印在训练日志中
+
+### 什么是 rFID
+
+rFID (reconstruction FID) 是衡量自编码器重建质量的指标，通过计算原始图像和重建图像之间的 FID 分数来评估。分数越低表示重建质量越好。
+
+### 评测命令
+
+```bash
+# 使用训练好的模型评测 rFID
+python src/eval_rfid.py \
+    --checkpoint logs/train/runs/XXXX-XX-XX/checkpoints/best.ckpt \
+    --data_dir /path/to/imagenet_hf \
+    --num_samples 10000 \
+    --batch_size 64 \
+    --device cuda \
+    --output_dir logs/rfid_samples
+
+# 使用 CPU 评测（如果没有 GPU）
+python src/eval_rfid.py \
+    --checkpoint logs/train/runs/XXXX-XX-XX/checkpoints/best.ckpt \
+    --data_dir /path/to/imagenet_hf \
+    --device cpu
+```
+
+### 参数说明
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| --checkpoint | 模型检查点路径 | 必需 |
+| --data_dir | 数据集目录 | 必需 |
+| --num_samples | 评测样本数量 | 10000 |
+| --batch_size | 批量大小 | 64 |
+| --image-size | 图像尺寸 | 256 |
+| --device | 计算设备 (cuda/cpu) | cuda |
+| --output-dir | 保存样本图像的目录 | None |
+| --num-workers | 数据加载进程数 | 4 |
+
+### 输出说明
+
+评测脚本会输出：
+1. rFID 分数（越低越好）
+2. 如果指定了 `--output_dir`，会保存原始图像和重建图像对比样本
+
+```bash
+rFID Score: 12.3456
+
+Sample images saved to: logs/rfid_samples
+```
+
+### 评测时机建议
+
+- 在训练结束后使用最佳模型评测
+- 可以在验证集上评测，避免过拟合
+- 建议使用至少 10000 张图像以获得稳定的结果
+
+---
+
 ## 训练输出
 
 ### 日志目录

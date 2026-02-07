@@ -5,7 +5,7 @@
 defaults:
   - override /data: imagenet
   - override /model: rae
-  - override /callbacks: default
+  - override /callbacks: rae
   - override /trainer: default
   - override /logger: tensorboard
 

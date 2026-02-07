@@ -1,0 +1,29 @@
+# RAE-specific callbacks
+# Note: RAE doesn't use early_stopping or validation
+
+model_checkpoint:
+  _target_: lightning.pytorch.callbacks.ModelCheckpoint
+  dirpath: ${paths.output_dir}/checkpoints
+  filename: "epoch_{epoch:03d}"
+  monitor: null  # RAE doesn't use validation metrics
+  save_last: True
+  auto_insert_metric_name: False
+  every_n_epochs: 1
+
+model_summary:
+  _target_: lightning.pytorch.callbacks.RichModelSummary
+  max_depth: -1
+
+rich_progress_bar:
+  _target_: lightning.pytorch.callbacks.RichProgressBar
+
+rfid:
+  _target_: src.callbacks.rfid_callback.RFIDCallback
+  rfid_every_n_steps: 1000
+  rfid_every_epoch: true
+  rfid_num_samples: 1000
+  rfid_batch_size: 64
+  rfid_device: cuda
+  rfid_output_dir: logs/rfid_samples
+  rfid_save_samples: true
+  save_samples_count: 64
