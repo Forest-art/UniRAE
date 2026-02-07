@@ -4,10 +4,10 @@
 model_checkpoint:
   _target_: lightning.pytorch.callbacks.ModelCheckpoint
   dirpath: ${paths.output_dir}/checkpoints
-  filename: "epoch_{epoch:03d}"
-  monitor: null  # RAE doesn't use validation metrics
-  save_last: True
-  auto_insert_metric_name: False
+  filename: epoch_{epoch:03d}
+  monitor: val/loss_recon
+  save_last: true
+  auto_insert_metric_name: false
   every_n_epochs: 1
 
 model_summary:
@@ -27,4 +27,5 @@ rfid:
   rfid_output_dir: logs/rfid_samples
   rfid_save_samples: true
   save_samples_count: 64
-  use_train_dataloader: true  # Fallback to train dataloader if validation set is not available
+  use_train_dataloader: false  # Do not fall back to train dataloader
+  use_full_validation_set: true  # Use all samples from validation set

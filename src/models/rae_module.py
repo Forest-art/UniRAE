@@ -303,15 +303,23 @@ class RAELitModule(LightningModule):
             self.discriminator.eval()
             self.rae.train()
         
-        # Log metrics
-        self.log("train/loss_total", total_loss.detach(), prog_bar=True)
-        self.log("train/loss_recon", rec_loss.detach())
-        self.log("train/loss_lpips", lpips_loss.detach())
-        self.log("train/loss_gan", gan_loss.detach())
+        # Log metrics with more details
+        self.log("train/loss_total", total_loss.detach(), prog_bar=True, on_step=True, on_epoch=True)
+        self.log("train/loss_recon", rec_loss.detach(), prog_bar=True, on_step=True, on_epoch=True)
+        self.log("train/loss_lpips", lpips_loss.detach(), prog_bar=False, on_step=True, on_epoch=True)
+        self.log("train/loss_gan", gan_loss.detach(), prog_bar=False, on_step=True, on_epoch=True)
+        
+        # Log adaptive weight and flags
+        if self.use_gan:
+            self.log("train/adaptive_weight", adaptive_weight.detach(), on_step=True, on_epoch=True)
+        self.log("train/use_gan", float(self.use_gan), on_step=False, on_epoch=True)
+        self.log("train/use_lpips", float(self.use_lpips), on_step=False, on_epoch=True)
         
         if disc_metrics:
-            self.log("train/disc_loss", disc_metrics["disc_loss"])
-            self.log("train/disc_accuracy", disc_metrics["disc_accuracy"])
+            self.log("train/disc_loss", disc_metrics["disc_loss"], prog_bar=True, on_step=True, on_epoch=True)
+            self.log("train/disc_accuracy", disc_metrics["disc_accuracy"], on_step=True, on_epoch=True)
+            self.log("train/logits_real", disc_metrics["logits_real"], on_step=True, on_epoch=True)
+            self.log("train/logits_fake", disc_metrics["logits_fake"], on_step=True, on_epoch=True)
         
         return total_loss
     
@@ -449,6 +457,18 @@ class RAELitModule(LightningModule):
                 self.logger.experiment.add_image("samples/reconstruction", grid, self.trainer.global_step)
         except Exception as e:
             self.print(f"Error generating samples: {e}")
+    
+    def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
+        """Validation step - compute reconstruction loss."""
+        images, _ = batch
+        images = images.to(self.device)
+        
+        with torch.no_grad():
+            recon = self.ema_model(images)
+            rec_loss = (recon - images).abs().mean()
+            
+        self.log("val/loss_recon", rec_loss, prog_bar=True, on_step=False, on_epoch=True)
+        return rec_loss
     
     def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Test step - compute reconstruction loss."""

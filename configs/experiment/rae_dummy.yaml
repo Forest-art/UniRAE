@@ -28,17 +28,18 @@ model:
 # Callback settings
 callbacks:
   model_checkpoint:
-    monitor: "val/loss"
+    monitor: "val/loss_recon"
   rfid:
     rfid_every_n_steps: 20  # Evaluate every 20 steps for testing
     rfid_every_epoch: true  # Evaluate at end of each epoch
-    rfid_num_samples: 50  # Fewer samples for quick testing
+    rfid_num_samples: 50  # Fewer samples for quick testing (when use_full_validation_set=false)
     rfid_batch_size: 32
     rfid_device: cuda
     rfid_output_dir: logs/rfid_samples
     rfid_save_samples: true
     save_samples_count: 16
-    use_train_dataloader: true
+    use_train_dataloader: false  # Require validation set
+    use_full_validation_set: false  # Use 50 samples for quick testing
 
 # Trainer settings
 trainer:

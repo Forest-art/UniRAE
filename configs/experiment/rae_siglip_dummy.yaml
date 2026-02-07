@@ -1,0 +1,53 @@
+# @package _global_
+# RAE SigLIP dummy test configuration
+# Quick test with dummy dataset
+
+defaults:
+  - override /data: imagenet
+  - override /model: rae_siglip
+  - override /callbacks: rae
+  - override /trainer: gpu
+  - override /logger: tensorboard
+
+# Experiment tags
+tags: ["rae", "siglip", "dummy", "test"]
+
+# Random seed
+seed: 12345
+
+# Trainer configuration - short test
+trainer:
+  max_epochs: 2
+  precision: 16
+  accumulate_grad_batches: 1
+  gradient_clip_val: null
+  val_check_interval: 1.0
+  check_val_every_n_epoch: 1
+
+# Data configuration - dummy dataset
+data:
+  data_dir: data/dummy_dataset_hf
+  batch_size: 8
+  num_workers: 2
+  pin_memory: false
+  train_split: 1.0
+  use_hf_dataset: true
+  hf_split: train
+  hf_validation_split: validation
+
+# Model configuration overrides
+model:
+  image_size: 256
+  sample_every: 20  # Sample more frequently for testing
+  disc_start_epoch: 1  # Start earlier for testing
+# Callbacks configuration - test with smaller samples
+callbacks:
+  model_checkpoint:
+    save_last: false  # Don't save checkpoint to avoid disk space issues
+  rfid:
+    rfid_every_n_steps: 20
+    rfid_every_epoch: true
+    rfid_num_samples: 50
+    rfid_batch_size: 32
+    rfid_save_samples: true
+    save_samples_count: 16
