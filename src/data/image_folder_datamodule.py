@@ -95,6 +95,7 @@ class ImageFolderDataModule(LightningDataModule):
         self.seed = seed
         self.use_hf_dataset = use_hf_dataset
         self.hf_split = hf_split
+        self.hf_validation_split = hf_validation_split
         
         self.train_dataset: Optional[Dataset] = None
         self.val_dataset: Optional[Dataset] = None
@@ -155,18 +156,34 @@ class ImageFolderDataModule(LightningDataModule):
             
             # Check if using separate validation split
             if self.hf_validation_split is not None:
-                if self.hf_validation_split not in hf_dataset:
-                    raise ValueError(
-                        f"Validation split '{self.hf_validation_split}' not found in dataset at {self.data_dir}. "
-                        f"Available: {list(hf_dataset.keys())}"
-                    )
-                # Use separate train and validation splits
-                train_hf = hf_dataset[self.hf_split]
-                val_hf = hf_dataset[self.hf_validation_split]
-                
-                self.train_dataset = HFImageNetDataset(train_hf, transform=self.train_transform)
-                self.val_dataset = HFImageNetDataset(val_hf, transform=self.val_transform)
-                print(f"[ImageFolderDataModule] Using separate splits: train={len(train_hf)}, val={len(val_hf)}")
+                if self.hf_validation_split in hf_dataset:
+                    # Use separate train and validation splits
+                    train_hf = hf_dataset[self.hf_split]
+                    val_hf = hf_dataset[self.hf_validation_split]
+                    
+                    self.train_dataset = HFImageNetDataset(train_hf, transform=self.train_transform)
+                    self.val_dataset = HFImageNetDataset(val_hf, transform=self.val_transform)
+                    print(f"[ImageFolderDataModule] Using separate splits: train={len(train_hf)}, val={len(val_hf)}")
+                else:
+                    # Validation split not found, use train_split parameter instead
+                    print(f"[ImageFolderDataModule] Warning: Validation split '{self.hf_validation_split}' not found. "
+                          f"Using train_split={self.train_split} to split '{self.hf_split}' data instead.")
+                    current_dataset = hf_dataset[self.hf_split]
+                    
+                    if self.train_split < 1.0:
+                        total_size = len(current_dataset)
+                        train_size = int(total_size * self.train_split)
+                        val_size = total_size - train_size
+                        
+                        train_hf = current_dataset.select(range(train_size))
+                        val_hf = current_dataset.select(range(train_size, total_size))
+                        
+                        self.train_dataset = HFImageNetDataset(train_hf, transform=self.train_transform)
+                        self.val_dataset = HFImageNetDataset(val_hf, transform=self.val_transform)
+                        print(f"[ImageFolderDataModule] Using split dataset: train={len(train_hf)}, val={len(val_hf)}")
+                    else:
+                        self.train_dataset = HFImageNetDataset(current_dataset, transform=self.train_transform)
+                        self.val_dataset = None
             else:
                 # Use single split and potentially split it
                 current_dataset = hf_dataset[self.hf_split]

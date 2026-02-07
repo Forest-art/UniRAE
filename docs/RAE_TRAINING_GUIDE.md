@@ -63,6 +63,53 @@ python scripts/create_hf_test_data.py
 └── ...
 ```
 
+### 数据集配置说明
+
+数据模块支持两种配置方式，根据数据集是否有独立的验证 split 选择：
+
+**方式 1：数据集有独立的 train/validation split（推荐）**
+
+如果数据集包含独立的 `train` 和 `validation` split（如官方 ImageNet 数据集），配置如下：
+
+```yaml
+# configs/data/my_dataset.yaml
+data_dir: /path/to/dataset_with_splits  # 包含 train 和 validation split
+use_hf_dataset: true
+hf_split: train
+hf_validation_split: validation  # 独立的验证集
+train_split: 1.0  # 使用全部 train 数据训练
+```
+
+**行为说明**：
+- 训练：使用 train split 的全部数据（train_split=1.0）
+- rFID 评测：使用 validation split（推荐，与训练数据独立）
+- 这是最佳配置，可以准确评估模型的泛化能力
+
+**方式 2：数据集只有 train split（从训练集分割）**
+
+如果数据集只有 `train` split（如测试数据集 `data/test_hf`），配置如下：
+
+```yaml
+# configs/data/my_dataset.yaml
+data_dir: /path/to/dataset_train_only  # 只有 train split
+use_hf_dataset: true
+hf_split: train
+hf_validation_split: validation  # 这个 split 不存在也没关系
+train_split: 0.8  # 80% 训练，20% 验证
+```
+
+**行为说明**：
+- 训练：使用 train split 的 80%（train_split=0.8）
+- rFID 评测：使用 train split 的 20%
+- 系统会自动检测 validation split 不存在，改用 train_split 参数分割
+- 适用于测试和小规模实验，但不推荐用于生产环境
+
+**重要提示**：
+- rFID 评测需要验证集来计算与真实数据的 FID 距离
+- 如果数据集有独立的 validation split，强烈推荐使用方式 1
+- 对于生产环境的完整训练，应该使用有独立验证集的数据集
+- 测试数据集 `data/test_hf` 只有 20 张图片，使用方式 2 配置 train_split=0.8 会得到 16 张训练图片和 4 张验证图片
+
 ---
 
 ## 训练命令
