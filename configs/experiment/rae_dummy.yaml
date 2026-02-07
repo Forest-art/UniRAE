@@ -1,0 +1,56 @@
+# @package _global_
+# RAE training with dummy dataset for testing and debugging
+defaults:
+  - override /data: imagenet
+  - override /model: rae
+  - override /callbacks: rae
+  - override /trainer: default
+
+tags: ["rae", "dummy_test"]
+
+# Data settings for dummy dataset
+data:
+  data_dir: data/dummy_dataset_hf
+  use_hf_dataset: true
+  hf_split: train
+  hf_validation_split: validation
+  image_size: 256
+  batch_size: 8  # Small batch size for dummy data
+  num_workers: 2
+  pin_memory: false
+  train_split: 1.0  # Use all train split data (validation is separate split)
+
+# Model settings
+model:
+  optimizer:
+    lr: 2e-4
+
+# Callback settings
+callbacks:
+  model_checkpoint:
+    monitor: "val/loss"
+  rfid:
+    rfid_every_n_steps: 500  # Evaluate every 500 steps
+    rfid_every_epoch: true  # Evaluate at end of each epoch
+    rfid_num_samples: 100  # Fewer samples for quick testing
+    rfid_batch_size: 32
+    rfid_device: cuda
+    rfid_output_dir: logs/rfid_samples
+    rfid_save_samples: true
+    save_samples_count: 16
+    use_train_dataloader: false
+
+# Trainer settings
+trainer:
+  max_epochs: 2
+  precision: 16
+  accelerator: auto
+  devices: auto
+  limit_train_batches: 0.1  # Use only 10% of data for quick testing
+  limit_val_batches: 0.5   # Use 50% of validation data
+  log_every_n_steps: 5
+  deterministic: false
+  accumulate_grad_batches: 1
+
+# Disable test for quick testing
+test: false

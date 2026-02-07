@@ -1,0 +1,23 @@
+_target_: src.models.linear_probe.LinearProbeModel
+
+# Encoder configuration
+encoder_cls: Dinov2withNorm
+encoder_config_path: facebook/dinov2-with-registers-base
+encoder_input_size: 224
+
+# Encoder checkpoint (path to RAE trained encoder)
+# Set to null to use pretrained HuggingFace encoder
+encoder_checkpoint: null
+
+# Classification
+num_classes: 1000  # ImageNet-1K has 1000 classes
+
+# Training hyperparameters
+lr: 1e-3
+weight_decay: 0.0
+max_epochs: 90
+
+# Model settings
+freeze_encoder: true  # Freeze encoder, only train classifier
+normalize_features: true  # Normalize features before classifier
+pool_type: avg  # Pooling type: 'avg', 'cls', or 'flatten'

@@ -1295,3 +1295,66 @@ You can override any parameter from command line like this
 ```bash
 python src/train.py trainer.max_epochs=20 data.batch_size=64
 ```
+
+## RAE Training
+
+This project includes support for training RAE (Reconstruction Autoencoder) models with DINO v2 encoders.
+
+### Quick Start
+
+```bash
+# Train RAE with single GPU
+python src/train.py experiment=rae_dino
+
+# Train RAE with multi-GPU DDP (8 GPUs)
+python src/train.py experiment=rae_ddp
+
+# Train with custom configuration
+python src/train.py experiment=rae_dino \
+    data.data_dir=/path/to/imagenet_hf \
+    data.batch_size=128 \
+    model.optimizer.lr=2e-4
+```
+
+### Documentation
+
+- **[RAE Training Guide](docs/RAE_TRAINING_GUIDE.md)** - Complete guide for training RAE models
+  - Environment setup
+  - Data preparation
+  - Training commands (single/multi GPU)
+  - rFID evaluation (边训边评)
+  - Configuration details
+
+## Linear Probing Evaluation
+
+Evaluate encoder representations using linear probing to assess the quality of learned features.
+
+### Quick Start
+
+```bash
+# Evaluate trained RAE encoder
+python src/eval_linear_probe.py \
+    --encoder_checkpoint logs/train/runs/XXXX/checkpoints/last.ckpt \
+    --data_dir /path/to/imagenet/val \
+    --output_dir logs/linear_probe
+
+# Compare with pretrained DINO v2 (baseline)
+python src/eval_linear_probe.py \
+    --encoder_checkpoint null \
+    --encoder_config_path facebook/dinov2-with-registers-base \
+    --data_dir /path/to/imagenet/val \
+    --output_dir logs/linear_probe/dino_baseline
+
+# Train linear probe with Hydra
+python src/train.py experiment=linear_probe \
+    model.encoder_checkpoint=logs/train/runs/XXXX/checkpoints/last.ckpt
+```
+
+### Documentation
+
+- **[Linear Probing Guide](docs/LINEAR_PROBING_GUIDE.md)** - Complete guide for linear probing evaluation
+  - What is linear probing
+  - Evaluation methods
+  - Configuration options
+  - Usage examples
+  - Result interpretation
