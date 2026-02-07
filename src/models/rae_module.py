@@ -30,7 +30,9 @@ from .disc import (
 class RAELitModule(LightningModule):
     """Lightning Module for RAE Stage-1 training with GAN and LPIPS losses."""
     
-    # Storage for scheduler params that need dataloader
+    # Instance storage for scheduler params that need dataloader
+    # These will be set in on_train_start
+    _steps_per_epoch = None
     _scheduler_params = None
 
     def __init__(
@@ -371,7 +373,7 @@ class RAELitModule(LightningModule):
         
         if scheduler_type == "cosine":
             # Store params to use after dataloader is available
-            RAELitModule._scheduler_params = {
+            self._scheduler_params = {
                 "warmup_epochs": scheduler_config.get("warmup_epochs", 0),
                 "decay_end_epoch": scheduler_config.get("decay_end_epoch", 16),
                 "base_lr": scheduler_config.get("base_lr", 2e-4),
@@ -379,13 +381,13 @@ class RAELitModule(LightningModule):
                 "warmup_from_zero": scheduler_config.get("warmup_from_zero", True),
             }
             
-            # Use a placeholder lambda that will use the class-level params
+            # Use a placeholder lambda that will use instance-level params
             def lr_lambda(step):
-                if RAELitModule._steps_per_epoch is None:
+                if self._steps_per_epoch is None:
                     return 1.0
                 
-                params = RAELitModule._scheduler_params
-                steps_per_epoch = RAELitModule._steps_per_epoch
+                params = self._scheduler_params
+                steps_per_epoch = self._steps_per_epoch
                 warmup_steps = params["warmup_epochs"] * steps_per_epoch
                 total_steps = params["decay_end_epoch"] * steps_per_epoch
                 base_lr = params["base_lr"]
@@ -409,7 +411,7 @@ class RAELitModule(LightningModule):
     def on_train_start(self):
         """Called when training starts."""
         # Set steps_per_epoch for schedulers after dataloader is available
-        RAELitModule._steps_per_epoch = len(self.trainer.train_dataloader)
+        self._steps_per_epoch = len(self.trainer.train_dataloader)
     
     def on_train_batch_end(self, outputs, batch: Any, batch_idx: int) -> None:
         """Called after each training batch."""
