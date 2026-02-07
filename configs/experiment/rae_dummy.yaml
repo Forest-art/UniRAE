@@ -29,6 +29,8 @@ model:
 callbacks:
   model_checkpoint:
     monitor: "val/loss_recon"
+  model_summary:
+    max_depth: 1  # Only print summary info, not all layers
   rfid:
     rfid_every_n_steps: 20  # Evaluate every 20 steps for testing
     rfid_every_epoch: true  # Evaluate at end of each epoch
