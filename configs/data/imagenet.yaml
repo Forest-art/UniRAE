@@ -1,0 +1,21 @@
+# @package _global_
+# ImageNet dataset configuration
+# Supports both ImageFolder and HuggingFace dataset formats
+
+_target_: src.data.image_folder_datamodule.ImageFolderDataModule
+
+# Dataset path - can be either:
+# - ImageFolder format: /path/to/imagenet/train
+# - HuggingFace format: /path/to/imagenet_hf (from save_from_disk())
+data_dir: ${oc.env:DATA_DIR,/data/imagenet_hf}
+
+image_size: 256
+batch_size: 16
+num_workers: 8
+pin_memory: true
+train_split: 1.0  # Use all data for training (no validation split)
+seed: 42
+
+# HuggingFace dataset configuration
+use_hf_dataset: true  # Set to false for ImageFolder format
+hf_split: "train"  # Which split to use ('train' or 'validation')

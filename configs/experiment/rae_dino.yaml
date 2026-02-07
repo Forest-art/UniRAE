@@ -1,0 +1,28 @@
+# @package _global_
+# RAE DINO experiment configuration
+
+defaults:
+  - override /data: imagenet.yaml
+  - override /model: rae.yaml
+  - override /callbacks: default.yaml
+  - override /trainer: default.yaml
+  - override /logger: null
+
+# Experiment tags
+tags: ["rae", "dino", "stage1"]
+
+# Random seed
+seed: 12345
+
+# Trainer configuration
+trainer:
+  max_epochs: 16
+  precision: 16  # Use mixed precision training
+  accumulate_grad_batches: 1
+  gradient_clip_val: null
+  val_check_interval: null  # Disable validation loop
+
+# Data configuration
+data:
+  batch_size: 16
+  num_workers: 8
