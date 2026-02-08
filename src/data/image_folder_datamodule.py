@@ -118,6 +118,16 @@ class ImageFolderDataModule(LightningDataModule):
     def _get_val_transform(self) -> Callable:
         """Get validation transformations."""
         def center_crop_arr(pil_image, image_size):
+            # First resize to slightly larger, then center crop
+            # This ensures the image is at least the target size before cropping
+            if min(pil_image.size) < image_size:
+                # If image is smaller than target, resize it
+                pil_image = transforms.functional.resize(
+                    pil_image, 
+                    (image_size, image_size), 
+                    interpolation=transforms.InterpolationMode.BICUBIC
+                )
+            # Then center crop to exact size
             pil_image = transforms.functional.center_crop(pil_image, (image_size, image_size))
             return pil_image
         

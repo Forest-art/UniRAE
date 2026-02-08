@@ -40,9 +40,20 @@ class RAE(nn.Module):
         # e.g., {dinov2_path: "path", normalize: true}
         self.encoder: Stage1Protocal = encoder_cls(**encoder_params)
         print(f"encoder_config_path: {encoder_config_path}")
-        proc = AutoImageProcessor.from_pretrained(encoder_config_path)
-        self.encoder_mean = torch.tensor(proc.image_mean).view(1, 3, 1, 1)
-        self.encoder_std = torch.tensor(proc.image_std).view(1, 3, 1, 1)
+
+        # Try to load the image processor, fall back to ImageNet defaults if not available
+        try:
+            proc = AutoImageProcessor.from_pretrained(encoder_config_path)
+            self.encoder_mean = torch.tensor(proc.image_mean).view(1, 3, 1, 1)
+            self.encoder_std = torch.tensor(proc.image_std).view(1, 3, 1, 1)
+            print(f"Loaded image processor from {encoder_config_path}")
+        except (OSError, RuntimeError) as e:
+            print(f"Warning: Could not load image processor from {encoder_config_path}: {e}")
+            print("Using default ImageNet normalization stats (DINOv2 uses ImageNet stats)")
+            # DINOv2 uses ImageNet normalization
+            self.encoder_mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
+            self.encoder_std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
+
         encoder_config = AutoConfig.from_pretrained(encoder_config_path)
         # see if the encoder has patch size attribute            
         self.encoder_input_size = encoder_input_size

@@ -8,7 +8,7 @@ _target_: src.data.image_folder_datamodule.ImageFolderDataModule
 # - HuggingFace format: /path/to/imagenet_hf (from save_from_disk())
 data_dir: ${oc.env:DATA_DIR,/data/imagenet_hf}
 
-image_size: 224
+image_size: 256  # RAE reference uses 256 for training, DINO encoder resizes to 224 internally
 batch_size: 16
 num_workers: 8
 pin_memory: true

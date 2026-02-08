@@ -10,7 +10,7 @@ encoder_params:
   dinov2_path: 'facebook/dinov2-with-registers-base'
   normalize: true
 
-decoder_config_path: '${paths.root_dir}/configs/decoder/ViTXL/config.json'
+decoder_config_path: '${paths.root_dir}/configs/decoder/ViTB/config.json'
 decoder_patch_size: 16
 pretrained_decoder_path: null
 noise_tau: 0.8
@@ -59,7 +59,7 @@ disc_scheduler:
   warmup_from_zero: true
 
 # Image configuration
-image_size: 224
+image_size: 256  # RAE reference uses 256 for training
 
 # Sampling configuration
 sample_every: 2500

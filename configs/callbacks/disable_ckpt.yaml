@@ -1,0 +1,18 @@
+model_checkpoint:
+  _target_: lightning.pytorch.callbacks.ModelCheckpoint
+  dirpath: ${paths.output_dir}/checkpoints
+  filename: epoch_{epoch:03d}
+  monitor: val/loss_recon
+  save_last: false
+  save_top_k: 0
+  auto_insert_metric_name: false
+  every_n_epochs: 1
+
+model_summary:
+  _target_: lightning.pytorch.callbacks.RichModelSummary
+  max_depth: 1
+
+rich_progress_bar:
+  _target_: lightning.pytorch.callbacks.RichProgressBar
+
+rfid: null

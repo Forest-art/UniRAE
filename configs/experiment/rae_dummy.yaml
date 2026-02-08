@@ -14,7 +14,7 @@ data:
   use_hf_dataset: true
   hf_split: train
   hf_validation_split: validation
-  image_size: 256
+  image_size: 224  # Must match encoder_input_size in model config and be divisible by encoder_patch_size (14)
   batch_size: 8  # Small batch size for dummy data
   num_workers: 2
   pin_memory: false
@@ -22,6 +22,7 @@ data:
 
 # Model settings
 model:
+  encoder_input_size: 224  # Must match data.image_size and be divisible by encoder_patch_size (14)
   optimizer:
     lr: 2e-4
 

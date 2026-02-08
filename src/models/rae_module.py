@@ -221,6 +221,16 @@ class RAELitModule(LightningModule):
         
         # Generator forward pass
         recon = self.rae(images)
+        
+        # Resize reconstruction to match input image size if needed
+        if recon.shape[-2:] != images.shape[-2:]:
+            recon = nn.functional.interpolate(
+                recon, 
+                size=images.shape[-2:], 
+                mode='bicubic', 
+                align_corners=False
+            )
+        
         recon_normed = recon * 2.0 - 1.0
         rec_loss = (recon - images).abs().mean()  # L1
         
@@ -275,10 +285,18 @@ class RAELitModule(LightningModule):
             for _ in range(self.hparams.disc_updates):
                 disc_optimizer.zero_grad(set_to_none=True)
                 
-                # Fresh forward pass
-                with torch.no_grad():
-                    recon_disc = self.rae(images)
-                    recon_disc_normed = recon_disc * 2.0 - 1.0
+            # Fresh forward pass
+            with torch.no_grad():
+                recon_disc = self.rae(images)
+                # Resize to match input if needed
+                if recon_disc.shape[-2:] != images.shape[-2:]:
+                    recon_disc = nn.functional.interpolate(
+                        recon_disc, 
+                        size=images.shape[-2:], 
+                        mode='bicubic', 
+                        align_corners=False
+                    )
+                recon_disc_normed = recon_disc * 2.0 - 1.0
                 
                 # Discretize
                 fake_detached = recon_disc_normed.clamp(-1.0, 1.0)
@@ -467,6 +485,14 @@ class RAELitModule(LightningModule):
         
         with torch.no_grad():
             recon = self.ema_model(images)
+            # Resize reconstruction to match input image size if needed
+            if recon.shape[-2:] != images.shape[-2:]:
+                recon = nn.functional.interpolate(
+                    recon, 
+                    size=images.shape[-2:], 
+                    mode='bicubic', 
+                    align_corners=False
+                )
             rec_loss = (recon - images).abs().mean()
             
         self.log("val/loss_recon", rec_loss, prog_bar=True, on_step=False, on_epoch=True)
@@ -479,6 +505,14 @@ class RAELitModule(LightningModule):
         
         with torch.no_grad():
             recon = self.ema_model(images)
+            # Resize reconstruction to match input image size if needed
+            if recon.shape[-2:] != images.shape[-2:]:
+                recon = nn.functional.interpolate(
+                    recon, 
+                    size=images.shape[-2:], 
+                    mode='bicubic', 
+                    align_corners=False
+                )
             rec_loss = (recon - images).abs().mean()
             
         self.log("test/loss_recon", rec_loss)
