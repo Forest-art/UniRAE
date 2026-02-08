@@ -209,7 +209,7 @@ class DinoDisc(nn.Module):
     def __init__(
         self,
         device: torch.device,
-        dino_ckpt_path: str,
+        dino_ckpt_path: str | None,
         ks: int,
         key_depths=(2, 5, 8, 11),
         norm_type="bn",
@@ -218,23 +218,29 @@ class DinoDisc(nn.Module):
         recipe: str = "S_16",
     ):
         super().__init__()
-        state = torch.load(dino_ckpt_path, map_location="cpu")
-        for key in sorted(state.keys()):
-            if ".attn.qkv.bias" in key:
-                bias = state[key]
-                C = bias.numel() // 3
-                bias[C : 2 * C].zero_()
 
         recipe_cfg = dict(recipes[recipe])
         key_depths = tuple(d for d in key_depths if d < recipe_cfg["depth"])
         recipe_cfg.update({"key_depths": key_depths, "norm_eps": norm_eps})
         dino = FrozenDINONoDrop(**recipe_cfg)
-        missing, unexpected = dino.load_state_dict(state, strict=False)
-        missing = [m for m in missing if all(x not in m for x in {"x_scale", "x_shift"})]
-        if missing:
-            raise RuntimeError(f"DINO checkpoint missing keys: {missing}")
-        if unexpected:
-            raise RuntimeError(f"DINO checkpoint has unexpected keys: {unexpected}")
+
+        # Load pretrained weights if provided, otherwise use random initialization
+        if dino_ckpt_path is not None:
+            state = torch.load(dino_ckpt_path, map_location="cpu")
+            for key in sorted(state.keys()):
+                if ".attn.qkv.bias" in key:
+                    bias = state[key]
+                    C = bias.numel() // 3
+                    bias[C : 2 * C].zero_()
+            missing, unexpected = dino.load_state_dict(state, strict=False)
+            missing = [m for m in missing if all(x not in m for x in {"x_scale", "x_shift"})]
+            if missing:
+                raise RuntimeError(f"DINO checkpoint missing keys: {missing}")
+            if unexpected:
+                raise RuntimeError(f"DINO checkpoint has unexpected keys: {unexpected}")
+            print(f"Loaded DINO discriminator from {dino_ckpt_path}")
+        else:
+            print("Using random initialization for DINO discriminator")
         dino.eval()
         self.dino_proxy: Tuple[FrozenDINONoDrop, ...] = (dino.to(device=device),)
         dino_C = self.dino_proxy[0].embed_dim

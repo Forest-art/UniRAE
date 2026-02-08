@@ -55,7 +55,7 @@ class RAE(nn.Module):
             self.encoder_std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
 
         encoder_config = AutoConfig.from_pretrained(encoder_config_path)
-        # see if the encoder has patch size attribute            
+        # see if the encoder has patch size attribute
         self.encoder_input_size = encoder_input_size
         self.encoder_patch_size = self.encoder.patch_size
         self.latent_dim = self.encoder.hidden_size
@@ -73,7 +73,7 @@ class RAE(nn.Module):
             decoder_config = AutoConfig.from_pretrained(decoder_config_path)
         decoder_config.hidden_size = self.latent_dim # set the hidden size of the decoder to be the same as the encoder's output
         decoder_config.patch_size = decoder_patch_size
-        decoder_config.image_size = int(decoder_patch_size * sqrt(self.base_patches)) 
+        decoder_config.image_size = int(decoder_patch_size * sqrt(self.base_patches))
         self.decoder = GeneralDecoder(decoder_config, num_patches=self.base_patches)
         # load pretrained decoder weights
         if pretrained_decoder_path is not None:

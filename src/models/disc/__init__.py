@@ -12,9 +12,7 @@ def build_discriminator(
 ) -> tuple[DinoDiscriminator, DiffAug]:
     """Instantiate Dino-based discriminator and its augmentation policy."""
     arch_cfg = config.get("arch", {})
-    ckpt_path = arch_cfg.get("dino_ckpt_path")
-    if not ckpt_path:
-        raise ValueError("DINO discriminator requires 'dino_ckpt_path' in gan.disc.arch.")
+    ckpt_path = arch_cfg.get("dino_ckpt_path")  # Can be None for random initialization
     disc = DinoDiscriminator(
         device=device,
         dino_ckpt_path=ckpt_path,

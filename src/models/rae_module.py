@@ -118,11 +118,16 @@ class RAELitModule(LightningModule):
         
         # Create EMA model
         self.ema_model = self._create_ema_model()
-        
-        # Initialize discriminator
+
+        # Initialize discriminator (only if disc_weight > 0)
         disc_arch = disc_arch or {}
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.discriminator, self.disc_aug = build_discriminator(disc_arch, device)
+        if disc_weight > 0:
+            self.discriminator, self.disc_aug = build_discriminator(disc_arch, device)
+        else:
+            self.discriminator = None
+            self.disc_aug = None
+            print("Warning: disc_weight=0, discriminator disabled")
         
         # Initialize LPIPS
         self.lpips = LPIPS()
@@ -217,20 +222,12 @@ class RAELitModule(LightningModule):
             optimizer = optimizer[0]
         
         optimizer.zero_grad(set_to_none=True)
-        self.discriminator.eval()
-        
+        if self.discriminator is not None:
+            self.discriminator.eval()
+
         # Generator forward pass
         recon = self.rae(images)
-        
-        # Resize reconstruction to match input image size if needed
-        if recon.shape[-2:] != images.shape[-2:]:
-            recon = nn.functional.interpolate(
-                recon, 
-                size=images.shape[-2:], 
-                mode='bicubic', 
-                align_corners=False
-            )
-        
+
         recon_normed = recon * 2.0 - 1.0
         rec_loss = (recon - images).abs().mean()  # L1
         
@@ -244,8 +241,8 @@ class RAELitModule(LightningModule):
         disc_loss_fn, gen_loss_fn = self._select_gan_losses()
         
         if self.use_gan:
-            fake_aug = self.disc_aug.aug(recon_normed)
-            logits_fake, _ = self.discriminator(fake_aug, None)
+            fake_aug = self.disc_aug.aug(recon_normed) if self.disc_aug is not None else recon_normed
+            logits_fake, _ = self.discriminator(fake_aug, None) if self.discriminator is not None else (torch.zeros_like(recon_normed[:, 0:1, 0:1, 0:1]), None)
             gan_loss = gen_loss_fn(logits_fake)
         else:
             gan_loss = torch.zeros_like(recon_total)
@@ -276,9 +273,9 @@ class RAELitModule(LightningModule):
         
         # Discriminator training
         disc_metrics = {}
-        if train_disc:
+        if train_disc and self.discriminator is not None:
             disc_optimizer = self.optimizers()[1]
-            
+
             self.rae.eval()
             self.discriminator.train()
             
@@ -288,14 +285,6 @@ class RAELitModule(LightningModule):
             # Fresh forward pass
             with torch.no_grad():
                 recon_disc = self.rae(images)
-                # Resize to match input if needed
-                if recon_disc.shape[-2:] != images.shape[-2:]:
-                    recon_disc = nn.functional.interpolate(
-                        recon_disc, 
-                        size=images.shape[-2:], 
-                        mode='bicubic', 
-                        align_corners=False
-                    )
                 recon_disc_normed = recon_disc * 2.0 - 1.0
                 
                 # Discretize
@@ -323,23 +312,21 @@ class RAELitModule(LightningModule):
             self.discriminator.eval()
             self.rae.train()
         
-        # Log metrics with more details
-        self.log("train/loss_total", total_loss.detach(), prog_bar=True, on_step=True, on_epoch=True)
-        self.log("train/loss_recon", rec_loss.detach(), prog_bar=True, on_step=True, on_epoch=True)
-        self.log("train/loss_lpips", lpips_loss.detach(), prog_bar=False, on_step=True, on_epoch=True)
-        self.log("train/loss_gan", gan_loss.detach(), prog_bar=False, on_step=True, on_epoch=True)
-        
+        # Log metrics with RAE-compatible naming (no train/ prefix)
+        self.log("loss/total", total_loss.detach(), prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
+        self.log("loss/recon", rec_loss.detach(), prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
+        self.log("loss/lpips", lpips_loss.detach(), prog_bar=False, on_step=True, on_epoch=True, sync_dist=True)
+        self.log("loss/gan", gan_loss.detach(), prog_bar=False, on_step=True, on_epoch=True, sync_dist=True)
+
         # Log adaptive weight and flags
         if self.use_gan:
-            self.log("train/adaptive_weight", adaptive_weight.detach(), on_step=True, on_epoch=True)
-        self.log("train/use_gan", float(self.use_gan), on_step=False, on_epoch=True)
-        self.log("train/use_lpips", float(self.use_lpips), on_step=False, on_epoch=True)
-        
+            self.log("disc/weight", adaptive_weight.detach(), on_step=True, on_epoch=True, sync_dist=True)
+
         if disc_metrics:
-            self.log("train/disc_loss", disc_metrics["disc_loss"], prog_bar=True, on_step=True, on_epoch=True)
-            self.log("train/disc_accuracy", disc_metrics["disc_accuracy"], on_step=True, on_epoch=True)
-            self.log("train/logits_real", disc_metrics["logits_real"], on_step=True, on_epoch=True)
-            self.log("train/logits_fake", disc_metrics["logits_fake"], on_step=True, on_epoch=True)
+            self.log("loss/disc", disc_metrics["disc_loss"], prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
+            self.log("disc/accuracy", disc_metrics["disc_accuracy"], on_step=True, on_epoch=True, sync_dist=True)
+            self.log("disc/logits_real", disc_metrics["logits_real"], on_step=True, on_epoch=True, sync_dist=True)
+            self.log("disc/logits_fake", disc_metrics["logits_fake"], on_step=True, on_epoch=True, sync_dist=True)
         
         return total_loss
     
@@ -352,38 +339,43 @@ class RAELitModule(LightningModule):
             lr=gen_optimizer_config.get("lr", 2e-4),
             betas=gen_optimizer_config.get("betas", [0.9, 0.95]),
             weight_decay=gen_optimizer_config.get("weight_decay", 0.0),
+            eps=1e-8,
+            fused=True,
         )
-        
-        # Discriminator optimizer
-        disc_optimizer_config = self.hparams.disc_optimizer or {}
-        disc_optimizer = torch.optim.AdamW(
-            [p for p in self.discriminator.parameters() if p.requires_grad],
-            lr=disc_optimizer_config.get("lr", 2e-4),
-            betas=disc_optimizer_config.get("betas", [0.9, 0.95]),
-            weight_decay=disc_optimizer_config.get("weight_decay", 0.0),
-        )
-        
-        # Build schedulers if configured
+
+        # Build scheduler for generator if configured
         gen_scheduler = None
-        disc_scheduler = None
-        
         if self.hparams.scheduler:
             gen_scheduler = self._build_scheduler(gen_optimizer, self.hparams.scheduler)
-        
-        if self.hparams.disc_scheduler:
-            disc_scheduler = self._build_scheduler(disc_optimizer, self.hparams.disc_scheduler)
-        
-        # Return optimizers and schedulers
-        gen_opt_dict = {"optimizer": gen_optimizer}
-        disc_opt_dict = {"optimizer": disc_optimizer}
-        
+
+        # Build return list starting with generator optimizer
+        optimizers = [{"optimizer": gen_optimizer}]
         if gen_scheduler is not None:
-            gen_opt_dict["lr_scheduler"] = {"scheduler": gen_scheduler, "interval": "step"}
-        
-        if disc_scheduler is not None:
-            disc_opt_dict["lr_scheduler"] = {"scheduler": disc_scheduler, "interval": "step"}
-        
-        return [gen_opt_dict, disc_opt_dict]
+            optimizers[0]["lr_scheduler"] = {"scheduler": gen_scheduler, "interval": "step"}
+
+        # Discriminator optimizer (only if discriminator exists)
+        if self.discriminator is not None:
+            disc_optimizer_config = self.hparams.disc_optimizer or {}
+            disc_optimizer = torch.optim.AdamW(
+                [p for p in self.discriminator.parameters() if p.requires_grad],
+                lr=disc_optimizer_config.get("lr", 2e-4),
+                betas=disc_optimizer_config.get("betas", [0.9, 0.95]),
+                weight_decay=disc_optimizer_config.get("weight_decay", 0.0),
+                eps=1e-8,
+                fused=True,
+            )
+
+            # Build scheduler for discriminator if configured
+            disc_scheduler = None
+            if self.hparams.disc_scheduler:
+                disc_scheduler = self._build_scheduler(disc_optimizer, self.hparams.disc_scheduler)
+
+            disc_opt_dict = {"optimizer": disc_optimizer}
+            if disc_scheduler is not None:
+                disc_opt_dict["lr_scheduler"] = {"scheduler": disc_scheduler, "interval": "step"}
+            optimizers.append(disc_opt_dict)
+
+        return optimizers
     
     def _build_scheduler(self, optimizer: torch.optim.Optimizer, scheduler_config: dict):
         """Build learning rate scheduler."""
@@ -434,11 +426,14 @@ class RAELitModule(LightningModule):
     def on_train_batch_end(self, outputs, batch: Any, batch_idx: int) -> None:
         """Called after each training batch."""
         # Log learning rates
-        opt = self.optimizers(use_pl_optimizer=False)[0]
+        opts = self.optimizers(use_pl_optimizer=False)
+        if not isinstance(opts, list):
+            opts = [opts]
+        opt = opts[0]
         self.log("lr/generator", opt.param_groups[0]["lr"])
-        
-        if len(self.optimizers(use_pl_optimizer=False)) > 1:
-            disc_opt = self.optimizers(use_pl_optimizer=False)[1]
+
+        if len(opts) > 1:
+            disc_opt = opts[1]
             self.log("lr/discriminator", disc_opt.param_groups[0]["lr"])
     
     def on_train_batch_start(self, batch: Any, batch_idx: int) -> None:
@@ -482,37 +477,21 @@ class RAELitModule(LightningModule):
         """Validation step - compute reconstruction loss."""
         images, _ = batch
         images = images.to(self.device)
-        
+
         with torch.no_grad():
             recon = self.ema_model(images)
-            # Resize reconstruction to match input image size if needed
-            if recon.shape[-2:] != images.shape[-2:]:
-                recon = nn.functional.interpolate(
-                    recon, 
-                    size=images.shape[-2:], 
-                    mode='bicubic', 
-                    align_corners=False
-                )
             rec_loss = (recon - images).abs().mean()
             
-        self.log("val/loss_recon", rec_loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log("val/loss_recon", rec_loss, prog_bar=True, on_step=False, on_epoch=True, sync_dist=True)
         return rec_loss
     
     def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Test step - compute reconstruction loss."""
         images, _ = batch
         images = images.to(self.device)
-        
+
         with torch.no_grad():
             recon = self.ema_model(images)
-            # Resize reconstruction to match input image size if needed
-            if recon.shape[-2:] != images.shape[-2:]:
-                recon = nn.functional.interpolate(
-                    recon, 
-                    size=images.shape[-2:], 
-                    mode='bicubic', 
-                    align_corners=False
-                )
             rec_loss = (recon - images).abs().mean()
             
         self.log("test/loss_recon", rec_loss)

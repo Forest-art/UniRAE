@@ -1,6 +1,6 @@
 <div align="center">
 
-# Lightning-Hydra RAE Training Framework
+# UniRAE - Universal RAE Training Framework
 
 [![python](https://img.shields.io/badge/-Python_3.8_%7C_3.9_%7C_3.10-blue?logo=python&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![pytorch](https://img.shields.io/badge/PyTorch_2.0+-ee4c2c?logo=pytorch&logoColor=white)](https://pytorch.org/get-started/locally/)
@@ -9,7 +9,7 @@
 [![black](https://img.shields.io/badge/Code%20Style-Black-black.svg?labelColor=gray)](https://black.readthedocs.io/en/stable/)
 [![isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
 
-基于 PyTorch Lightning 和 Hydra 的 RAE (Reconstruction Autoencoder) 训练框架
+基于 PyTorch Lightning 和 Hydra 的通用 RAE (Reconstruction Autoencoder) 训练框架
 
 </div>
 
@@ -17,7 +17,7 @@
 
 ## 📌 项目简介
 
-本项目是基于 [Lightning-Hydra-Template](https://github.com/ashleve/lightning-hydra-template) 开发的 RAE 训练框架，集成了完整的训练、评估和实验管理功能。
+UniRAE 是一个统一的自编码器训练框架，集成了完整的训练、评估和实验管理功能。框架设计灵活，易于扩展新的算法和模型。
 
 ### 核心功能
 
@@ -28,7 +28,7 @@
 - ✅ **Linear Probing**: 评估编码器的表示学习质量
 - ✅ **灵活配置**: 基于 Hydra 的配置系统，支持命令行参数覆盖
 - ✅ **多种日志**: 支持 TensorBoard、W&B、MLFlow 等多种日志工具
-- ✅ **完整文档**: 详细的训练和评估指南
+- ✅ **易于扩展**: 模块化设计，便于添加新的算法和模型
 
 <br>
 
@@ -39,11 +39,11 @@
 ```bash
 # 克隆项目
 git clone <repository-url>
-cd lightning-hydra-template
+cd UniRAE
 
 # 使用 conda 安装（推荐）
 conda env create -f environment.yaml
-conda activate rae-train
+conda activate unirae
 
 # 或使用 pip 安装
 pip install -r requirements.txt
@@ -169,14 +169,14 @@ python src/eval_dit.py \
 - 使用示例和结果解读
 
 ### 迁移总结
-[**MIGRATION_SUMMARY.md**](docs/MIGRATION_SUMMARY.md) - 从原始 RAE 代码迁移到 Lightning-Hydra 框架的总结
+[**MIGRATION_SUMMARY.md**](docs/MIGRATION_SUMMARY.md) - 从原始 RAE 代码迁移到 UniRAE 框架的总结
 
 <br>
 
 ## 🏗️ 项目结构
 
 ```
-lightning-hydra-template/
+UniRAE/
 ├── configs/                   # Hydra 配置文件
 │   ├── callbacks/            # Callback 配置
 │   │   ├── rae.yaml         # RAE 训练 callbacks
@@ -505,6 +505,19 @@ python src/train.py experiment=rae_dino data.num_workers=8
 3. **调整 batch size**: 根据显存大小调整 batch size，保持 global batch size = batch_size × num_gpus
 4. **使用混合精度**: `precision: 16` 可以显著减少显存使用
 5. **定期保存样本**: 使用 rFID callback 保存重建样本，直观评估重建质量
+
+<br>
+
+## 🔬 扩展新算法
+
+UniRAE 设计为易于扩展的框架。添加新算法的步骤：
+
+1. 在 `src/models/` 中创建新的模型模块
+2. 在 `configs/model/` 中添加对应的配置
+3. 在 `configs/experiment/` 中创建实验配置
+4. 如需新的评估指标，在 `src/callbacks/` 中添加 callback
+
+详细的扩展指南请参考项目文档。
 
 <br>
 

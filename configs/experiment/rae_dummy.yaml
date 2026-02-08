@@ -10,7 +10,7 @@ tags: ["rae", "dummy_test"]
 
 # Data settings for dummy dataset
 data:
-  data_dir: data/dummy_dataset_hf
+  data_dir: ${paths.data_dir}/dummy_dataset_hf
   use_hf_dataset: true
   hf_split: train
   hf_validation_split: validation
@@ -23,6 +23,9 @@ data:
 # Model settings
 model:
   encoder_input_size: 224  # Must match data.image_size and be divisible by encoder_patch_size (14)
+  decoder_patch_size: 14  # Must match encoder_patch_size (14 for DINOv2)
+  image_size: 224  # Must match data.image_size for reconstruction
+  disc_weight: 0.0  # Disable discriminator for dummy test
   optimizer:
     lr: 2e-4
 
@@ -40,7 +43,7 @@ trainer:
   accelerator: auto
   devices: auto
   limit_train_batches: 0.1  # Use only 10% of data for quick testing
-  limit_val_batches: 0.5   # Use 50% of validation data
+  limit_val_batches: 1   # Use 50% of validation data
   log_every_n_steps: 5
   deterministic: false
   accumulate_grad_batches: 1
