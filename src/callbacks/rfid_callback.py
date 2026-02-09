@@ -1,6 +1,7 @@
 """
 Callback for evaluating rFID during training.
 Evaluates rFID at specified intervals (e.g., every N steps or every epoch).
+Uses torchmetrics.FrechetInceptionDistance for online computation.
 """
 
 from pathlib import Path
@@ -12,8 +13,7 @@ from lightning.pytorch.callbacks import Callback
 from torch.utils.data import DataLoader, Dataset
 from PIL import Image
 from tqdm import tqdm
-
-from torch_fidelity import calculate_metrics
+from torchmetrics.image.fid import FrechetInceptionDistance
 
 
 class ImageListDataset(Dataset):
@@ -41,33 +41,56 @@ class ImageListDataset(Dataset):
         return img
 
 
-def compute_rfid(original_images, reconstructed_images, batch_size=64, device="cuda"):
+def compute_rfid(original_images, reconstructed_images, batch_size=64, device="cuda", feature=2048):
     """
     Compute rFID (reconstruction FID) between original and reconstructed images.
+    Uses torchmetrics.FrechetInceptionDistance for online computation.
     
     Args:
-        original_images: List or array of original images (PIL or numpy)
+        original_images: List or array of original images (PIL or numpy, in HWC or CHW format)
         reconstructed_images: List or array of reconstructed images
         batch_size: Batch size for feature extraction
         device: Device to use for computation
+        feature: Dimension of Inception features (default 2048 for Inception v3)
         
     Returns:
         rFID score (lower is better)
     """
-    # Create datasets
-    original_ds = ImageListDataset(original_images)
-    recon_ds = ImageListDataset(reconstructed_images)
+    # Convert images to torch tensors (C, H, W) format with dtype uint8 in range [0, 255]
+    def to_tensor(img):
+        if isinstance(img, np.ndarray):
+            if img.ndim == 3 and img.shape[2] == 3:  # HWC
+                return torch.tensor(img.astype(np.uint8)).permute(2, 0, 1)
+            elif img.ndim == 3 and img.shape[0] == 3:  # CHW
+                return torch.tensor(img.astype(np.uint8))
+        elif isinstance(img, Image.Image):
+            img = np.array(img)
+            return torch.tensor(img.astype(np.uint8)).permute(2, 0, 1)
+        return img
     
-    # Calculate FID using torch_fidelity
-    metrics = calculate_metrics(
-        input1=original_ds,
-        input2=recon_ds,
-        batch_size=batch_size,
-        fid=True,
-        cuda=(device == "cuda"),
-    )
+    # Convert lists to tensors
+    original_tensors = [to_tensor(img) for img in original_images]
+    reconstructed_tensors = [to_tensor(img) for img in reconstructed_images]
     
-    return metrics["frechet_inception_distance"]
+    # Stack into single tensors (N, C, H, W)
+    original_batch = torch.stack(original_tensors).to(device)
+    reconstructed_batch = torch.stack(reconstructed_tensors).to(device)
+    
+    # Initialize FrechetInceptionDistance
+    fid = FrechetInceptionDistance(feature=feature).to(device)
+    
+    # Update with original images
+    for i in range(0, len(original_batch), batch_size):
+        fid.update(original_batch[i:i+batch_size], real=True)
+    
+    # Update with reconstructed images
+    for i in range(0, len(reconstructed_batch), batch_size):
+        fid.update(reconstructed_batch[i:i+batch_size], real=False)
+    
+    # Compute FID
+    rfid_score = fid.compute()
+    
+    return rfid_score.item()
 
 
 class RFIDCallback(Callback):
