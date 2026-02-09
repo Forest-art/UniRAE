@@ -328,6 +328,25 @@ class RAELitModule(LightningModule):
             self.log("disc/logits_real", disc_metrics["logits_real"], on_step=True, on_epoch=True, sync_dist=True)
             self.log("disc/logits_fake", disc_metrics["logits_fake"], on_step=True, on_epoch=True, sync_dist=True)
         
+        # Store detailed loss info for printing in on_train_batch_end
+        self._detailed_loss_info = {
+            "total": total_loss.detach().item(),
+            "recon": rec_loss.detach().item(),
+            "lpips": lpips_loss.detach().item(),
+            "gan": gan_loss.detach().item(),
+            "use_gan": self.use_gan,
+            "use_lpips": self.use_lpips,
+        }
+        if disc_metrics:
+            self._detailed_loss_info.update({
+                "disc_loss": disc_metrics["disc_loss"].item(),
+                "disc_accuracy": disc_metrics["disc_accuracy"].item(),
+                "logits_real": disc_metrics["logits_real"].item(),
+                "logits_fake": disc_metrics["logits_fake"].item(),
+            })
+            if self.use_gan:
+                self._detailed_loss_info["adaptive_weight"] = adaptive_weight.detach().item()
+        
         return total_loss
     
     def configure_optimizers(self):
@@ -425,6 +444,35 @@ class RAELitModule(LightningModule):
     
     def on_train_batch_end(self, outputs, batch: Any, batch_idx: int) -> None:
         """Called after each training batch."""
+        # Print detailed loss information (similar to original RAE)
+        if self.trainer.global_step > 0 and hasattr(self, '_detailed_loss_info'):
+            loss_info = self._detailed_loss_info
+            
+            # Build stats dict for printing
+            stats = {
+                "loss/total": loss_info["total"],
+                "loss/recon": loss_info["recon"],
+                "loss/lpips": loss_info["lpips"],
+                "loss/gan": loss_info["gan"],
+            }
+            
+            # Add discriminator metrics if available
+            if "disc_loss" in loss_info:
+                stats.update({
+                    "loss/disc": loss_info["disc_loss"],
+                    "disc/logits_real": loss_info["logits_real"],
+                    "disc/logits_fake": loss_info["logits_fake"],
+                    "disc/accuracy": loss_info["disc_accuracy"],
+                })
+                if "adaptive_weight" in loss_info:
+                    stats["disc/weight"] = loss_info["adaptive_weight"]
+            
+            # Print in format similar to original RAE
+            epoch = self.trainer.current_epoch
+            step = self.trainer.global_step
+            stats_str = ", ".join(f"{k}: {v:.4f}" for k, v in stats.items())
+            self.print(f"[Epoch {epoch} | Step {step}] {stats_str}")
+        
         # Log learning rates
         opts = self.optimizers(use_pl_optimizer=False)
         if not isinstance(opts, list):
