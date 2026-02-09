@@ -1,0 +1,49 @@
+# @package _global_
+# DiT training with dummy dataset for testing and debugging
+defaults:
+  - override /data: imagenet
+  - override /model: dit
+  - override /callbacks: none
+  - override /trainer: default
+
+tags: ["dit", "dummy_test"]
+
+# Data settings for dummy dataset
+data:
+  data_dir: ${paths.data_dir}/dummy_dataset_hf
+  use_hf_dataset: true
+  hf_split: train
+  hf_validation_split: validation
+  image_size: 224
+  batch_size: 8  # Small batch size for dummy data
+  num_workers: 2
+  pin_memory: false
+  train_split: 1.0  # Use all train split data (validation is separate split)
+
+# Model settings
+model:
+  rae:
+    encoder_input_size: 224
+    decoder_config_path: '${paths.root_dir}/configs/decoder/ViTB/config.json'
+  dit:
+    hidden_size: [384, 384]  # Smaller model for testing (384 is divisible by 6)
+    depth: [6, 2]
+    num_heads: [6, 6]
+  learning_rate: 2e-4
+
+# Trainer settings
+trainer:
+  max_epochs: 2
+  precision: 16
+  accelerator: auto
+  devices: auto
+  limit_train_batches: 0.05  # Use only 5% of data for quick testing
+  limit_val_batches: 0.5  # Use 50% of validation data
+  log_every_n_steps: 5
+  deterministic: false
+  accumulate_grad_batches: 1
+  enable_checkpointing: false  # Disable checkpointing to save disk space
+  max_steps: 20  # Limit total steps for testing
+
+# Disable test for quick testing
+test: false

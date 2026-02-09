@@ -1,7 +1,7 @@
 import importlib
 from dataclasses import dataclass
 from typing import Union, Tuple, Optional
-from stage1 import RAE
+from src.models.stage1 import RAE
 import torch.nn as nn
 from omegaconf import OmegaConf
 import torch

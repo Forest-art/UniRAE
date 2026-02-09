@@ -1,0 +1,25 @@
+defaults:
+  - model: linear_probe
+  - data: imagenet
+  - trainer: default
+  - logger: tensorboard
+  - callbacks: default
+
+# Data settings (ImageNet-1K for linear probing)
+data:
+  data_dir: /path/to/imagenet_hf
+  use_hf_dataset: true
+  hf_split: train
+  hf_validation_split: validation
+  train_split: 1.0  # Use all training data
+  image_size: 224  # Standard ImageNet size
+  batch_size: 256
+  num_workers: 8
+
+# Trainer settings
+trainer:
+  max_epochs: 90
+  precision: 16
+  accelerator: auto
+  devices: auto
+  deterministic: false

@@ -24,8 +24,8 @@ from torch.cuda.amp import autocast
 from torchvision.utils import save_image
 from tqdm import tqdm
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+import rootutils
+rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
 from src.models.stage1 import RAE
 from src.models.stage2 import DiTwDDTHead, LightningDiT, Stage2ModelProtocol

@@ -1,0 +1,35 @@
+# @package _global_
+# RAE DINO DDP experiment configuration
+# Based on RAE/configs/stage1/training/DINOv2-B_decXL.yaml
+
+defaults:
+  - override /data: imagenet
+  - override /model: rae
+  - override /callbacks: rae
+  - override /trainer: ddp
+  - override /logger: tensorboard
+
+# Experiment tags
+tags: ["rae", "dino", "ddp", "stage1"]
+
+# Random seed
+seed: 12345
+
+# Trainer configuration
+# Original: epochs=16
+trainer:
+  max_epochs: 16
+  precision: 16  # Use mixed precision training (fp16)
+  accumulate_grad_batches: 1
+  gradient_clip_val: null
+  val_check_interval: 1.0  # Run validation every epoch (needed for rFID callback)
+  check_val_every_n_epoch: 1
+
+# Data configuration
+# Original: global_batch_size=512, num_workers=8
+# For 8 GPUs: 512/8=64 per GPU
+# For 4 GPUs: 512/4=128 per GPU
+# Adjust based on your number of GPUs
+data:
+  batch_size: 64  # For 8 GPUs: 512/8=64. Adjust based on your setup
+  num_workers: 8
