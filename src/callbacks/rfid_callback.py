@@ -153,27 +153,25 @@ class RFIDCallback(Callback):
         if self.rfid_every_n_steps <= 0:
             return
         
-        # Only evaluate on the main process, but gather data from all processes
-        if trainer.is_global_zero:
-            # Check if it's time to evaluate
-            current_step = trainer.global_step
-            if current_step > 0 and current_step % self.rfid_every_n_steps == 0 and current_step != self.last_eval_step:
-                self._evaluate_rfid(trainer, pl_module, f"step_{current_step}")
-                self.last_eval_step = current_step
+        # Check if it's time to evaluate
+        current_step = trainer.global_step
+        if current_step > 0 and current_step % self.rfid_every_n_steps == 0 and current_step != self.last_eval_step:
+            # Evaluate on all processes (for DDP synchronization)
+            self._evaluate_rfid(trainer, pl_module, f"step_{current_step}")
+            self.last_eval_step = current_step
     
     def on_train_epoch_end(self, trainer, pl_module):
         """Called at the end of each training epoch."""
-        # Only evaluate on the main process, but gather data from all processes
         if not self.rfid_every_epoch:
             return
         
-        if trainer.is_global_zero:
-            epoch = trainer.current_epoch
-            self._evaluate_rfid(trainer, pl_module, f"epoch_{epoch}")
+        # Evaluate on all processes (for DDP synchronization)
+        epoch = self.trainer.current_epoch
+        self._evaluate_rfid(trainer, pl_module, f"epoch_{epoch}")
     
     def _evaluate_rfid(self, trainer, pl_module, eval_name: str):
         """Evaluate rFID and log results."""
-        print(f"\n[RFIDCallback] Starting rFID evaluation at {eval_name}...")
+        print(f"\n[RFIDCallback] Starting rFID evaluation at {eval_name} (rank {trainer.global_rank})...")
         
         # Get model
         model = pl_module
