@@ -13,7 +13,7 @@ defaults:
 tags: ["rae", "dino", "ddp", "stage1"]
 
 # Random seed
-seed: 12345
+seed: 1234
 
 # Trainer configuration
 # Original: epochs=16
@@ -31,5 +31,5 @@ trainer:
 # For 4 GPUs: 512/4=128 per GPU
 # Adjust based on your number of GPUs
 data:
-  batch_size: 64  # For 8 GPUs: 512/8=64. Adjust based on your setup
+  batch_size: 32  # For 8 GPUs: 512/8=64. Adjust based on your setup
   num_workers: 8

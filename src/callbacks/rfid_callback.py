@@ -41,7 +41,7 @@ class ImageListDataset(Dataset):
         return img
 
 
-def compute_rfid(original_images, reconstructed_images, batch_size=64, device="cuda", feature=2048):
+def compute_rfid(original_images, reconstructed_images, batch_size=64, device="cpu", feature=2048):
     """
     Compute rFID (reconstruction FID) between original and reconstructed images.
     Uses torchmetrics.FrechetInceptionDistance for online computation.
@@ -49,13 +49,16 @@ def compute_rfid(original_images, reconstructed_images, batch_size=64, device="c
     Args:
         original_images: List or array of original images (PIL or numpy, in HWC or CHW format)
         reconstructed_images: List or array of reconstructed images
-        batch_size: Batch size for feature extraction
-        device: Device to use for computation
+        batch_size: Batch size for FID computation
+        device: Device to use for computation (default: 'cpu' to save GPU memory)
         feature: Dimension of Inception features (default 2048 for Inception v3)
         
     Returns:
         rFID score (lower is better)
     """
+    print(f"[compute_rfid] Starting rFID computation on device: {device}")
+    print(f"[compute_rfid] Number of images: {len(original_images)}")
+    
     # Convert images to torch tensors (C, H, W) format with dtype uint8 in range [0, 255]
     def to_tensor(img):
         if isinstance(img, np.ndarray):
@@ -69,26 +72,38 @@ def compute_rfid(original_images, reconstructed_images, batch_size=64, device="c
         return img
     
     # Convert lists to tensors
+    print("[compute_rfid] Converting images to tensors...")
     original_tensors = [to_tensor(img) for img in original_images]
     reconstructed_tensors = [to_tensor(img) for img in reconstructed_images]
     
     # Stack into single tensors (N, C, H, W)
+    print("[compute_rfid] Stacking tensors...")
     original_batch = torch.stack(original_tensors).to(device)
     reconstructed_batch = torch.stack(reconstructed_tensors).to(device)
+    print(f"[compute_rfid] Batch shapes: original={original_batch.shape}, recon={reconstructed_batch.shape}")
     
     # Initialize FrechetInceptionDistance
+    print("[compute_rfid] Initializing FrechetInceptionDistance...")
     fid = FrechetInceptionDistance(feature=feature).to(device)
     
     # Update with original images
+    print(f"[compute_rfid] Updating FID with original images (batch_size={batch_size})...")
     for i in range(0, len(original_batch), batch_size):
+        if i % (batch_size * 5) == 0:  # Print every 5 batches
+            print(f"[compute_rfid] Processing original batch {i}/{len(original_batch)}")
         fid.update(original_batch[i:i+batch_size], real=True)
     
     # Update with reconstructed images
+    print(f"[compute_rfid] Updating FID with reconstructed images (batch_size={batch_size})...")
     for i in range(0, len(reconstructed_batch), batch_size):
+        if i % (batch_size * 5) == 0:  # Print every 5 batches
+            print(f"[compute_rfid] Processing recon batch {i}/{len(reconstructed_batch)}")
         fid.update(reconstructed_batch[i:i+batch_size], real=False)
     
     # Compute FID
+    print("[compute_rfid] Computing FID score...")
     rfid_score = fid.compute()
+    print(f"[compute_rfid] FID score computed: {rfid_score}")
     
     return rfid_score.item()
 
@@ -197,15 +212,18 @@ class RFIDCallback(Callback):
         # Check if using DDP
         is_ddp = trainer.world_size > 1
         
-        # Collect images
+        # Collect images (use training device for forward pass)
         original_images = []
         reconstructed_images = []
         
-        device = self.rfid_device
+        # Use training device for model forward pass
+        train_device = pl_module.device
         
         # Determine if we should limit samples
         limit_samples = not self.use_full_validation_set and self.rfid_num_samples is not None
         max_samples = self.rfid_num_samples if limit_samples else float('inf')
+        
+        print(f"[RFIDCallback] Collecting samples on device: {train_device}, computing rFID on device: {self.rfid_device}")
         
         with torch.no_grad():
             for batch in tqdm(dataloader, desc=f"Collecting samples for {eval_name} ({dataloader_type} set)", leave=False):
@@ -214,7 +232,7 @@ class RFIDCallback(Callback):
                     break
                 
                 images, _ = batch
-                images = images.to(device)
+                images = images.to(train_device)
                 
                 # Forward pass
                 recon = eval_model(images)
@@ -274,7 +292,7 @@ class RFIDCallback(Callback):
             original_images,
             reconstructed_images,
             batch_size=self.rfid_batch_size,
-            device=device,
+            device=self.rfid_device,
         )
         
         # Log results
