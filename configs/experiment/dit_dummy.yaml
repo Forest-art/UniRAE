@@ -1,107 +1,49 @@
 # @package _global_
-
+# DiT training with dummy dataset for testing and debugging
 defaults:
   - override /data: imagenet
   - override /model: dit
-  - override /trainer: cpu
-  - override /callbacks: default
-  - override /logger: tensorboard
+  - override /callbacks: none
+  - override /trainer: default
 
-# Experiment name
-task_name: "dit_dummy_test"
+tags: ["dit", "dummy_test"]
 
-# Data configuration (small test dataset)
+# Data settings for dummy dataset
 data:
-  data_dir: "data/test_hf"  # Small test dataset
-  image_size: 128  # Smaller images for testing
-  batch_size: 4
-  num_workers: 0
-  train_split: 0.8  # Split test data
-  pin_memory: false
+  data_dir: ${paths.data_dir}/dummy_dataset_hf
   use_hf_dataset: true
-  hf_split: "train"
-  hf_validation_split: "validation"
+  hf_split: train
+  hf_validation_split: validation
+  image_size: 224
+  batch_size: 8  # Small batch size for dummy data
+  num_workers: 2
+  pin_memory: false
+  train_split: 1.0  # Use all train split data (validation is separate split)
 
-# Model configuration (simplified)
+# Model settings
 model:
-  _target_: src.models.dit_module.DiTModule
   rae:
-    _target_: src.models.stage1.RAE
-    encoder_cls: 'Dinov2withNorm'
-    encoder_config_path: 'facebook/dinov2-with-registers-base'
-    encoder_input_size: 128
-    encoder_params:
-      dinov2_path: 'facebook/dinov2-with-registers-base'
-      normalize: true
-    decoder_config_path: 'models/decoders/dinov2/wReg_base/ViTB'  # Smaller decoder
-    pretrained_decoder_path: 'models/decoders/dinov2/wReg_base/ViTB_n04/model.pt'
-    noise_tau: 0.0
-    reshape_to_2d: true
+    encoder_input_size: 224
+    decoder_config_path: '${paths.root_dir}/configs/decoder/ViTB/config.json'
   dit:
-    _target_: src.models.stage2.DiTwDDTHead
-    input_size: 8  # Smaller latent size for 128x128 images
-    patch_size: 1
-    in_channels: 768
-    hidden_size: [512, 1024]  # Smaller hidden sizes
-    depth: [8, 2]  # Fewer layers
-    num_heads: [8, 8]  # Fewer heads
-    mlp_ratio: 4.0
-    class_dropout_prob: 0.1
-    num_classes: 10  # Fewer classes for testing
-    use_qknorm: false
-    use_swiglu: true
-    use_rope: true
-    use_rmsnorm: true
-    wo_shift: false
-    use_pos_embed: true
-  dit_module:
-    ema_decay: 0.999  # Faster EMA for testing
-    learning_rate: 1e-4
-    weight_decay: 0.0
-    betas: [0.9, 0.95]
-    warmup_steps: 10
-    max_steps: 100
-    num_classes: 10
-    null_label: 10
-    latent_size: [768, 8, 8]  # Smaller latent
-    compile: false
+    hidden_size: [384, 384]  # Smaller model for testing (384 is divisible by 6)
+    depth: [6, 2]
+    num_heads: [6, 6]
+  learning_rate: 2e-4
 
-# Trainer configuration (short training)
+# Trainer settings
 trainer:
   max_epochs: 2
-  gradient_clip_val: 1.0
-  accumulate_grad_batches: 1
   precision: 16
-  check_val_every_n_epoch: 1
-  log_every_n_steps: 1
+  accelerator: auto
+  devices: auto
+  limit_train_batches: 0.05  # Use only 5% of data for quick testing
+  limit_val_batches: 0.5  # Use 50% of validation data
+  log_every_n_steps: 5
+  deterministic: false
+  accumulate_grad_batches: 1
+  enable_checkpointing: false  # Disable checkpointing to save disk space
   max_steps: 20  # Limit total steps for testing
 
-# Callbacks
-callbacks:
-  model_checkpoint:
-    monitor: "val/loss"
-    mode: "min"
-    save_top_k: 1
-    save_last: true
-    every_n_train_steps: 10
-  early_stopping:
-    monitor: "val/loss"
-    patience: 5
-    mode: "min"
-
-# Paths
-paths:
-  root_dir: ${oc.env:PROJECT_ROOT,.}
-  data_dir: ${paths.root_dir}/data
-  log_dir: ${paths.root_dir}/logs
-  output_dir: ${hydra:runtime.cwd}/outputs
-
-# Hydra configuration
-hydra:
-  run:
-    dir: ${paths.log_dir}/runs/${now:%Y-%m-%d}/${now:%H-%M-%S}
-  sweep:
-    dir: ${paths.log_dir}/multiruns/${now:%Y-%m-%d}/${now:%H-%M-%S}
-    subdir: ${hydra.job.num}
-  mode: MULTIRUN
-  verbose: false
+# Disable test for quick testing
+test: false

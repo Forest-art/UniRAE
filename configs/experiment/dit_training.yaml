@@ -1,0 +1,188 @@
+# @package _global_
+
+# DiT Training Experiment Configuration
+# This is a comprehensive configuration for DiT training with RAE encoder
+
+defaults:
+  - override /data: imagenet
+  - override /model: dit
+  - override /trainer: ddp
+  - override /callbacks: default
+  - override /logger: wandb
+  - override /paths: default
+
+# Experiment name
+task_name: "dit_training"
+tags: ["dit", "stage2", "diffusion"]
+
+# Training flags
+train: true
+test: false
+
+# Seed for reproducibility
+seed: 42
+
+# Data configuration
+data:
+  image_size: 256
+  batch_size: 32  # Per GPU batch size (global_batch_size=1024 / 32 GPUs = 32)
+  num_workers: 8
+  pin_memory: true
+  train_split: 1.0  # Use all training data
+
+# Model configuration - DiT module with RAE encoder
+model:
+  _target_: src.models.dit_module.DiTModule
+
+  # RAE encoder configuration (frozen during stage2 training)
+  rae:
+    _target_: src.models.stage1.RAE
+    encoder_cls: 'Dinov2withNorm'
+    encoder_config_path: 'facebook/dinov2-with-registers-base'
+    encoder_input_size: 224
+    encoder_params:
+      dinov2_path: 'facebook/dinov2-with-registers-base'
+      normalize: true
+    decoder_config_path: 'models/decoders/dinov2/wReg_base/ViTXL'
+    pretrained_decoder_path: 'models/decoders/dinov2/wReg_base/ViTXL_n08/model.pt'
+    noise_tau: 0.0
+    reshape_to_2d: true
+
+  # DiT-XL configuration
+  dit:
+    _target_: src.models.stage2.DiTwDDTHead
+    input_size: 16
+    patch_size: 1
+    in_channels: 768
+    hidden_size: [1152, 2048]
+    depth: [28, 2]
+    num_heads: [16, 16]
+    mlp_ratio: 4.0
+    class_dropout_prob: 0.1
+    num_classes: 1000
+    use_qknorm: false
+    use_swiglu: true
+    use_rope: true
+    use_rmsnorm: true
+    wo_shift: false
+    use_pos_embed: true
+
+  # DiT Module training configuration
+  dit_module:
+    ema_decay: 0.9995
+    learning_rate: 2.0e-4
+    weight_decay: 0.0
+    betas: [0.9, 0.95]
+    warmup_steps: 5000
+    max_steps: 100000
+    num_classes: 1000
+    null_label: 1000
+    latent_size: [768, 16, 16]
+    compile: false
+
+  # Transport configuration
+  transport:
+    path_type: 'Linear'
+    prediction: 'velocity'
+    loss_weight: null
+    time_dist_type: 'logit-normal_0_1'
+
+  # Sampler configuration
+  sampler:
+    mode: ODE
+    sampling_method: 'euler'
+    num_steps: 50
+    atol: 1.0e-6
+    rtol: 1.0e-3
+    reverse: false
+
+  # Guidance configuration
+  guidance:
+    method: 'cfg'
+    scale: 1.0
+    t_min: 0.0
+    t_max: 1.0
+
+# RAE specific settings
+rae:
+  encoder_checkpoint_path: null  # Set to trained RAE checkpoint path
+  encoder_trainable: false  # Freeze encoder during stage2
+
+# Training configuration
+training:
+  max_steps: 100000
+  global_batch_size: 1024
+  grad_accum_steps: 1
+  clip_grad: 1.0
+  ema_decay: 0.9995
+  epochs: 1400
+  log_interval: 100
+  sample_every: 2500
+  checkpoint_interval: 4
+
+# Evaluation configuration
+eval:
+  eval_interval: 25000
+  eval_model: true
+  fid_num_samples: 50000
+  batch_size: 64
+  num_workers: 8
+
+# Trainer configuration
+trainer:
+  max_epochs: 1400
+  gradient_clip_val: 1.0
+  accumulate_grad_batches: 1
+  precision: 16
+  check_val_every_n_epoch: 1
+  log_every_n_steps: 100
+  val_check_interval: 10000
+  limit_val_batches: 1
+
+# Callbacks configuration
+callbacks:
+  model_checkpoint:
+    _target_: lightning.pytorch.callbacks.ModelCheckpoint
+    dirpath: ${paths.output_dir}/checkpoints
+    filename: "epoch_{epoch:03d}"
+    monitor: "val/loss"
+    mode: "min"
+    save_top_k: 3
+    save_last: true
+    every_n_epochs: 10
+    save_on_train_epoch_end: true
+
+  model_summary:
+    _target_: lightning.pytorch.callbacks.ModelSummary
+    max_depth: -1
+
+  learning_rate_monitor:
+    _target_: lightning.pytorch.callbacks.LearningRateMonitor
+    logging_interval: "step"
+
+# Logger configuration
+logger:
+  wandb:
+    _target_: lightning.pytorch.loggers.wandb.WandbLogger
+    project: "unirae_dit"
+    name: ${task_name}
+    save_dir: ${paths.output_dir}
+    offline: false
+    id: null
+    anonymous: null
+    log_model: false
+    prefix: ""
+    tags: ${tags}
+
+# Hydra configuration
+hydra:
+  run:
+    dir: ${paths.log_dir}/runs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: ${paths.log_dir}/multiruns/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num}
+  mode: MULTIRUN
+  verbose: false
+
+# Optimized metric for hyperparameter search
+optimized_metric: "val/loss"

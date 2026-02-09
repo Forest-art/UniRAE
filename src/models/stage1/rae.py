@@ -76,12 +76,17 @@ class RAE(nn.Module):
         decoder_config.image_size = int(decoder_patch_size * sqrt(self.base_patches))
         self.decoder = GeneralDecoder(decoder_config, num_patches=self.base_patches)
         # load pretrained decoder weights
-        if pretrained_decoder_path is not None:
-            print(f"Loading pretrained decoder from {pretrained_decoder_path}")
-            state_dict = torch.load(pretrained_decoder_path, map_location='cpu')
-            keys = self.decoder.load_state_dict(state_dict, strict=False)
-            if len(keys.missing_keys) > 0:
-                print(f"Missing keys when loading pretrained decoder: {keys.missing_keys}")
+        if pretrained_decoder_path is not None and pretrained_decoder_path != 'None':
+            if os.path.exists(pretrained_decoder_path):
+                print(f"Loading pretrained decoder from {pretrained_decoder_path}")
+                state_dict = torch.load(pretrained_decoder_path, map_location='cpu')
+                keys = self.decoder.load_state_dict(state_dict, strict=False)
+                if len(keys.missing_keys) > 0:
+                    print(f"Missing keys when loading pretrained decoder: {keys.missing_keys}")
+            else:
+                print(f"Warning: pretrained_decoder_path '{pretrained_decoder_path}' does not exist, skipping pretrained loading")
+        else:
+            print("No pretrained decoder path provided, initializing decoder from scratch")
         self.noise_tau = noise_tau
         self.reshape_to_2d = reshape_to_2d
         if normalization_stat_path is not None:

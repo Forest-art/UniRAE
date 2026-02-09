@@ -1,0 +1,71 @@
+# Sample configuration for DiT sampling with RAE
+
+# Stage 1: RAE configuration
+stage_1:
+  target: src.models.stage1.RAE
+  params:
+    encoder_cls: 'Dinov2withNorm'
+    encoder_config_path: 'facebook/dinov2-with-registers-base'
+    encoder_input_size: 224
+    encoder_params:
+      dinov2_path: 'facebook/dinov2-with-registers-base'
+      normalize: true
+    decoder_config_path: 'models/decoders/dinov2/wReg_base/ViTXL'
+    pretrained_decoder_path: 'models/decoders/dinov2/wReg_base/ViTXL_n08/model.pt'
+    noise_tau: 0.0
+    reshape_to_2d: true
+  ckpt: null  # Path to RAE checkpoint if needed
+
+# Stage 2: DiT model configuration
+stage_2:
+  target: src.models.stage2.DiTwDDTHead
+  params:
+    input_size: 16
+    patch_size: 1
+    in_channels: 768
+    hidden_size: [1152, 2048]
+    depth: [28, 2]
+    num_heads: [16, 16]
+    mlp_ratio: 4.0
+    class_dropout_prob: 0.1
+    num_classes: 1000
+    use_qknorm: false
+    use_swiglu: true
+    use_rope: true
+    use_rmsnorm: true
+    wo_shift: false
+    use_pos_embed: true
+  ckpt: null  # Path to DiT checkpoint
+
+# Transport configuration
+transport:
+  params:
+    path_type: 'Linear'
+    prediction: 'velocity'
+    loss_weight: null
+    time_dist_type: 'logit-normal_0_1'
+
+# Sampler configuration
+sampler:
+  mode: ODE
+  params:
+    sampling_method: 'euler'
+    num_steps: 50
+    atol: 1.0e-6
+    rtol: 1.0e-3
+    reverse: false
+
+# Classifier-free guidance configuration
+guidance:
+  method: 'cfg'
+  scale: 1.5  # CFG scale > 1.0 enables guidance
+  t_min: 0.0
+  t_max: 1.0
+
+# Miscellaneous settings
+misc:
+  num_classes: 1000
+  null_label: 1000
+  latent_size: [768, 16, 16]  # [C, H, W]
+  time_dist_shift_dim: 196608  # 768 * 16 * 16
+  time_dist_shift_base: 4096

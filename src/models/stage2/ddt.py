@@ -6,6 +6,7 @@ Adapted from RAE repository.
 import torch
 import torch.nn as nn
 from typing import Union, List
+from math import sqrt
 from .lightning_dit import LightningDiTBlock, LightningFinalLayer
 from .model_utils import (
     VisionRotaryEmbeddingFast, SwiGLUFFN, RMSNorm,
@@ -236,13 +237,13 @@ class DiTwDDTHead(nn.Module):
         # Use rotary position encoding, borrow from EVA
         if self.use_rope:
             enc_half_head_dim = self.encoder_hidden_size // enc_num_heads // 2
-            hw_seq_len = int(s_input_size / s_patch_size)
+            hw_seq_len = int(sqrt(self.s_embedder.num_patches))
             self.enc_feat_rope = VisionRotaryEmbeddingFast(
                 dim=enc_half_head_dim,
                 pt_seq_len=hw_seq_len,
             )
             dec_half_head_dim = self.decoder_hidden_size // dec_num_heads // 2
-            hw_seq_len = int(x_input_size / x_patch_size)
+            hw_seq_len = int(sqrt(self.x_embedder.num_patches))
             self.dec_feat_rope = VisionRotaryEmbeddingFast(
                 dim=dec_half_head_dim,
                 pt_seq_len=hw_seq_len,

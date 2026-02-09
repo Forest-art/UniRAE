@@ -59,10 +59,10 @@ disc_scheduler:
   warmup_from_zero: true
 
 # Image configuration
-image_size: 256  # RAE reference uses 256 for training
+image_size: 224  # RAE reference uses 224 for training
 
 # Sampling configuration
-sample_every: 2500
+sample_every: 100
 
 # Compile model
 compile: false

@@ -4,8 +4,50 @@ from omegaconf import OmegaConf
 import logging
 from typing import Optional, Tuple
 import shutil
+import torch
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.optim.lr_scheduler import LambdaLR
 from .wandb_utils import initialize, create_logger
 import logging
+
+
+def save_checkpoint(
+    path: str,
+    step: int,
+    epoch: int,
+    model: DDP,
+    ema_model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+    scheduler: Optional[LambdaLR],
+) -> None:
+    """Save training checkpoint."""
+    state = {
+        "step": step,
+        "epoch": epoch,
+        "model": model.module.state_dict(),
+        "ema": ema_model.state_dict(),
+        "optimizer": optimizer.state_dict(),
+        "scheduler": scheduler.state_dict() if scheduler is not None else None,
+    }
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    torch.save(state, path)
+
+
+def load_checkpoint(
+    path: str,
+    model: DDP,
+    ema_model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+    scheduler: Optional[LambdaLR],
+) -> Tuple[int, int]:
+    """Load training checkpoint."""
+    checkpoint = torch.load(path, map_location="cpu")
+    model.module.load_state_dict(checkpoint["model"])
+    ema_model.load_state_dict(checkpoint["ema"])
+    optimizer.load_state_dict(checkpoint["optimizer"])
+    if scheduler is not None and checkpoint.get("scheduler") is not None:
+        scheduler.load_state_dict(checkpoint["scheduler"])
+    return checkpoint.get("epoch", 0), checkpoint.get("step", 0)
 
 def configure_experiment_dirs(args, rank) -> Tuple[str, str, logging.Logger]:
     experiment_name = os.environ.get("EXPERIMENT_NAME")

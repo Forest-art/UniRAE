@@ -4,6 +4,7 @@ from PIL import Image
 import numpy as np
 from collections import OrderedDict
 import torch
+from torch.cuda.amp import GradScaler
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from torchvision import transforms
@@ -11,6 +12,28 @@ from torchvision.datasets import ImageFolder
 from pathlib import Path
 from copy import deepcopy
 from .dist_utils import setup_distributed
+import os
+
+
+class HuggingFaceDataset(torch.utils.data.Dataset):
+    """Wrapper for HuggingFace datasets to work with torchvision transforms."""
+
+    def __init__(self, dataset, transform=None):
+        self.dataset = dataset
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        # Get image from HuggingFace dataset (already PIL Image)
+        image = self.dataset[idx]['image']
+
+        if self.transform:
+            image = self.transform(image)
+
+        # Return image with dummy label (unused)
+        return image, 0
 
 
 
@@ -82,9 +105,25 @@ def prepare_dataloader(
     workers: int,
     rank: int,
     world_size: int,
-    transform: List= None,
+    transform: List = None,
+    use_hf_dataset: bool = False,
 ) -> Tuple[DataLoader, DistributedSampler]:
-    dataset = ImageFolder(str(data_path), transform=transform)
+    # Check if data_path is a HuggingFace dataset directory
+    is_hf_dataset = (
+        use_hf_dataset or
+        (data_path / "dataset_info.json").exists() or
+        (data_path / "dataset_dict.json").exists()
+    )
+
+    if is_hf_dataset:
+        from datasets import load_from_disk
+        print(f"Loading HuggingFace dataset from {data_path}")
+        hf_dataset = load_from_disk(str(data_path))
+        # Wrap with transforms
+        dataset = HuggingFaceDataset(hf_dataset['train'], transform=transform)
+    else:
+        dataset = ImageFolder(str(data_path), transform=transform)
+
     sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, shuffle=True)
     loader = DataLoader(
         dataset,
@@ -106,5 +145,5 @@ def get_autocast_scaler(args) -> Tuple[dict, torch.cuda.amp.GradScaler | None]:
     else:
         scaler = None
         autocast_kwargs = dict(enabled=False)
-    
+
     return scaler, autocast_kwargs

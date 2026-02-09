@@ -1,0 +1,139 @@
+# @package _global_
+
+# DiT Training Main Configuration
+# This is the main configuration file for DiT/DDT stage 2 training
+
+defaults:
+  - _self_
+  - data: imagenet
+  - model: dit
+  - callbacks: dit_callbacks
+  - logger: tensorboard
+  - trainer: gpu
+  - paths: default
+  - extras: default
+  - hydra: default
+
+  # experiment configs allow for version control of specific hyperparameters
+  - experiment: null
+
+  # optional local config for machine/user specific settings
+  - optional local: default
+
+  # debugging config (enable through command line, e.g. `python train_dit.py debug=default)
+  - debug: null
+
+# task name, determines output directory path
+task_name: "train_dit"
+
+# tags to help you identify your experiments
+tags: ["dit", "stage2", "diffusion"]
+
+# set False to skip model training
+train: True
+
+# evaluate on test set, using best model weights achieved during training
+test: True
+
+# simply provide checkpoint path to resume training
+ckpt_path: null
+
+# seed for random number generators in pytorch, numpy and python.random
+seed: 42
+
+# Stage 1 RAE Configuration (encoder is frozen during stage 2)
+stage_1:
+  target: src.models.stage1.RAE
+  params:
+    encoder_cls: 'Dinov2withNorm'
+    encoder_config_path: 'facebook/dinov2-with-registers-base'
+    encoder_input_size: 224
+    encoder_params:
+      dinov2_path: 'facebook/dinov2-with-registers-base'
+      normalize: true
+    decoder_config_path: 'models/decoders/dinov2/wReg_base/ViTXL'
+    pretrained_decoder_path: null  # Set to path of trained decoder
+    noise_tau: 0.0
+    reshape_to_2d: true
+    normalization_stat_path: 'models/stats/dinov2/wReg_base/imagenet1k/stat.pt'
+
+# Stage 2 DiT/DDT Configuration
+stage_2:
+  target: src.models.stage2.DiTwDDTHead
+  params:
+    input_size: 16
+    patch_size: 1
+    in_channels: 768
+    hidden_size: [1152, 2048]  # DiT-XL config
+    depth: [28, 2]
+    num_heads: [16, 16]
+    mlp_ratio: 4.0
+    class_dropout_prob: 0.1
+    num_classes: 1000
+    use_qknorm: false
+    use_swiglu: true
+    use_rope: true
+    use_rmsnorm: true
+    wo_shift: false
+    use_pos_embed: true
+
+# Transport Configuration (Linear transport with velocity prediction)
+transport:
+  path_type: 'Linear'
+  prediction: 'velocity'
+  loss_weight: null
+  time_dist_type: 'logit-normal_0_1'
+
+# Sampler Configuration (ODE with Euler)
+sampler:
+  mode: ODE
+  sampling_method: 'euler'
+  num_steps: 50
+  atol: 1.0e-6
+  rtol: 1.0e-3
+  reverse: false
+
+# Guidance Configuration (Classifier-free guidance)
+guidance:
+  method: 'cfg'
+  scale: 1.0
+  t_min: 0.0
+  t_max: 1.0
+
+# Training Configuration
+training:
+  epochs: 1400
+  global_batch_size: 1024  # Global batch size across all GPUs
+  grad_accum_steps: 1  # Gradient accumulation steps (adjust based on GPU memory)
+  ema_decay: 0.9995
+  num_workers: 16
+  log_interval: 100
+  checkpoint_interval: 10
+  sample_every: 10000
+  clip_grad: 1.0
+  global_seed: 42
+  optimizer:
+    lr: 2.0e-4
+    betas: [0.9, 0.95]
+    weight_decay: 0.0
+  scheduler:
+    type: linear
+    warmup_epochs: 40
+    decay_end_epoch: 800
+    base_lr: 2.0e-4
+    final_lr: 2.0e-5
+    warmup_from_zero: false
+
+# Evaluation Configuration
+eval:
+  eval_interval: 25000  # Evaluate every N steps
+  eval_model: true
+  data_path: 'data/imagenet/val/'
+  reference_npz_path: 'data/imagenet/VIRTUAL_imagenet256_labeled.npz'
+
+# Miscellaneous Configuration
+misc:
+  latent_size: [768, 16, 16]  # [C, H, W]
+  num_classes: 1000
+  time_dist_shift_dim: 196608  # 16*16*768
+  time_dist_shift_base: 4096
